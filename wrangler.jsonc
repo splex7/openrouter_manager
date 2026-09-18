@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "account_id": "04008268bb7367adfe15513494aafe3a",
+  "name": "classkeys",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "key.jeiu.cc",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "OPENROUTER_WORKSPACE_ID": "8fbbe019-352b-45a2-9e6c-cc789519ca41"
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "classkeys",
+      "database_id": "3f3f3f55-fa99-4d36-82a7-040aa0ea3345",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,1 +1,284 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ClassKeys · OpenRouter</title><link rel="stylesheet" href="/styles.css"></head><body><header class="topbar"><div><h1>ClassKeys</h1><p>OpenRouter key manager for classes</p></div><button id="refreshBtn" class="button ghost">Refresh</button></header><main><section class="stats"><div><span>Total keys</span><strong id="totalCount">—</strong></div><div><span>Active</span><strong id="activeCount">—</strong></div><div><span>Disabled</span><strong id="disabledCount">—</strong></div><div><span>Total usage</span><strong id="usageTotal">—</strong></div></section><section class="panel"><div class="section-head"><div><h2>Student keys</h2><p>Search, change limits, disable or delete keys.</p></div><button id="openBulkBtn" class="button primary">Generate student keys</button></div><div class="toolbar"><input id="searchInput" type="search" placeholder="Search student ID or name…"><select id="statusFilter"><option value="all">All statuses</option><option value="active">Active only</option><option value="disabled">Disabled only</option></select></div><div id="notice" class="notice hidden"></div><div class="table-wrap"><table><thead><tr><th>Student / key</th><th>Status</th><th>Usage</th><th>Limit</th><th>Reset</th><th>Created</th><th></th></tr></thead><tbody id="keyRows"></tbody></table></div></section></main><dialog id="bulkDialog"><form method="dialog" class="dialog-card" id="bulkForm"><div class="dialog-head"><div><h2>Generate student keys</h2><p>Paste one student per line: <code>2026001, Kim Mina</code></p></div><button class="icon-button" value="cancel">×</button></div><label>Student list<textarea id="studentsInput" rows="10" placeholder="2026001, Kim Mina&#10;2026002, Lee Joon" required></textarea></label><div class="form-grid"><label>USD limit per key<input id="limitInput" type="number" min="0" step="0.01" value="5"></label><label>Reset<select id="resetInput"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="daily">Daily</option><option value="">No reset</option></select></label><label>Expiration UTC<input id="expiresInput" type="datetime-local"></label><label>Workspace ID<input id="workspaceInput" type="text" placeholder="Optional UUID"></label></div><div class="security-note">Plaintext keys are shown only once by OpenRouter. Download the CSV immediately after generation.</div><div class="dialog-actions"><button class="button ghost" value="cancel">Cancel</button><button id="generateBtn" class="button primary" value="default">Generate keys</button></div></form></dialog><dialog id="resultDialog"><div class="dialog-card"><div class="dialog-head"><div><h2>Keys generated</h2><p id="resultSummary"></p></div><button id="closeResultsBtn" class="icon-button">×</button></div><div class="security-note strong">Download now. Plaintext keys cannot be fetched again later.</div><div class="dialog-actions left"><button id="downloadCsvBtn" class="button primary">Download CSV</button></div><div class="table-wrap result-table"><table><thead><tr><th>ID</th><th>Name</th><th>Result</th><th>Key</th></tr></thead><tbody id="resultRows"></tbody></table></div></div></dialog><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>ClassKeys</title>
+    <link rel="stylesheet" href="/styles.css?v=2026-09-19.2">
+    <link rel="stylesheet" href="/logo.css?v=2026-09-19.2">
+    <style>.sidebar{align-self:start;position:sticky;top:0;height:100vh;overflow-y:auto}@media(max-width:760px){.sidebar{position:static;height:auto}}</style>
+    <style>[hidden]{display:none!important}.secret-output{width:100%;min-height:90px;resize:vertical;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;padding:10px;border:1px solid #cad2df;border-radius:6px}.key-warning{margin:0;color:#65718b;font-size:13px;line-height:1.55}.portal-card{width:min(100%,1100px)}.portal-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:24px}.portal-intro h1{max-width:720px}.portal-intro p{margin:8px 0 0}.portal-intro .muted{margin:0;text-align:right}.portal-controls{display:grid;justify-items:end;gap:10px;flex:none}.portal-controls .table-button{padding:6px 0}.portal-overview{display:grid;grid-template-columns:minmax(0,1.12fr) minmax(280px,.88fr);gap:16px;margin-bottom:18px}.portal-panel,.portal-key-section{border:1px solid var(--line);border-radius:10px;background:#fff}.portal-panel{padding:20px}.portal-panel h2,.portal-key-section h2{margin:0;font-size:17px;letter-spacing:-.03em}.portal-budget-values{display:flex;align-items:baseline;gap:8px;margin:22px 0 10px}.portal-budget-values strong{font-size:30px;letter-spacing:-.05em}.portal-budget-values span{color:var(--muted);font-size:14px}.portal-progress{height:8px;overflow:hidden;border-radius:999px;background:#e8ebf0}.portal-progress span{display:block;height:100%;min-width:0;border-radius:inherit;background:#e60013}.portal-budget-note,.portal-connect-note{margin:12px 0 0;color:var(--muted);font-size:13px;line-height:1.55}.portal-code-row{display:flex;align-items:center;gap:10px;margin-top:16px;padding:10px 12px;border:1px solid #d7dde8;border-radius:7px;background:#f7f9fc}.portal-code-row code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#24385e;font-size:12px}.portal-code-row .table-button{margin-left:auto;flex:none}.portal-key-section{margin-top:16px;overflow:hidden}.portal-section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 20px;border-bottom:1px solid var(--line)}.portal-section-head p{margin:3px 0 0;color:var(--muted);font-size:12px}.portal-key-list{display:grid}.portal-key-row{display:grid;grid-template-columns:minmax(190px,1.2fr) minmax(170px,1fr) minmax(190px,.9fr) auto;gap:18px;align-items:center;padding:15px 20px;border-bottom:1px solid var(--line)}.portal-key-row:last-child{border-bottom:0}.portal-key-row strong{display:block;font-size:14px}.portal-key-row small{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.4}.portal-key-label{min-width:0}.portal-key-label code{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.portal-key-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px}.portal-key-status{font-weight:700}.portal-key-status.revoked{color:var(--muted)}.portal-key-status.active{color:var(--success)}.portal-empty{margin:0;padding:28px 20px;color:var(--muted);font-size:14px;text-align:center}.portal-gemini{display:flex;align-items:center;gap:16px;margin-top:16px;padding:18px 20px;border:1px solid #d8dee9;border-left:4px solid #4285f4;border-radius:10px;background:#fff}.portal-gemini-mark{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:#f1f5ff;color:#4285f4;font-size:16px;font-weight:800}.portal-gemini-copy{min-width:0;flex:1}.portal-gemini-copy strong{display:block;font-size:14px}.portal-gemini-copy p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.45}.portal-gemini-link{color:var(--blue);font-size:13px;font-weight:750;text-decoration:none;white-space:nowrap}.portal-gemini-link:hover{text-decoration:underline}.portal-footer{display:flex;justify-content:flex-end;margin-top:20px}.masked-key{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}.usage-cell strong{white-space:nowrap}@media(max-width:760px){.sidebar{justify-content:flex-start}.account-menu{margin-top:8px}.student-portal{align-items:start;padding:16px}.portal-card{padding:0;border:0;background:transparent}.portal-intro{gap:16px;margin-bottom:16px}.portal-intro h1{font-size:25px}.portal-controls{justify-items:start}.portal-intro .muted{text-align:left}.portal-overview{grid-template-columns:1fr;gap:12px;margin-bottom:12px}.portal-panel{padding:17px}.portal-budget-values{margin:18px 0 9px}.portal-budget-values strong{font-size:27px}.portal-key-section{margin-top:12px}.portal-section-head{align-items:flex-start;padding:16px}.portal-key-row{grid-template-columns:1fr;gap:10px;padding:16px}.portal-key-meta{grid-column:auto;grid-template-columns:1fr 1fr;gap:10px;padding-top:2px}.portal-key-row .table-button{justify-self:start}.portal-gemini{align-items:flex-start;margin-top:12px;padding:16px}.portal-gemini-link{align-self:flex-end}.portal-footer{justify-content:stretch;margin-top:16px}.portal-footer .button{width:100%}.portal-code-row{padding:10px}.portal-code-row code{font-size:11px}}</style>
+    <style>.summary{grid-template-columns:repeat(4,minmax(0,1fr))}.portal-model-search{display:grid;gap:6px;padding:0 20px}.portal-model-search input{width:100%}.portal-model-selected{padding:0 20px;color:var(--muted);font-size:13px}.portal-model-list{display:flex;max-height:360px;flex-wrap:wrap;gap:8px;overflow:auto;padding:16px 20px}.portal-model-option{border:0;background:transparent;padding:0;text-align:left;cursor:pointer}.portal-model-option.selected .model-card{border-color:var(--blue);box-shadow:0 0 0 2px #dce8fb}.portal-model-list code{padding:6px 8px;border-radius:5px;background:#f3f6fb;color:#24385e;font-size:12px}.brand-mark{width:112px;padding:7px 10px;background:#fff}.brand-mark img{display:block;width:100%;height:100%;object-fit:contain}.model-card{display:flex;align-items:center;gap:10px;min-width:0;padding:8px 10px;border:1px solid #dde3ed;border-radius:7px;background:#f8faff}.model-card.compact{padding:0;border:0;background:transparent}.model-logo{position:relative;display:grid;place-items:center;width:28px;height:28px;flex:none;overflow:hidden;border:1px solid #dce2eb;border-radius:7px;background:#fff;color:#34405a;font-size:12px;font-weight:800}.model-logo img{position:absolute;inset:0;width:100%;height:100%;padding:4px;background:#fff;object-fit:contain}.model-card-copy{display:grid;min-width:0;gap:2px}.model-card-copy strong{font-size:12px;font-weight:750;line-height:1.2}.model-card-copy code{display:block;overflow:hidden;padding:0;background:transparent;color:#33476f;font-size:12px;line-height:1.3;text-overflow:ellipsis;white-space:nowrap}.portal-model-list .model-card{max-width:100%}.checkbox-filter{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted);font-size:13px;font-weight:650}.checkbox-filter input{width:auto;padding:0}.masked-key.revoked{color:var(--danger);font-weight:750}.key-history-row.revoked>span{color:#8a94a7;text-decoration:line-through}.key-history-row.revoked small,.key-history-row.revoked code{color:#8a94a7}.key-field-label{display:flex;align-items:center;justify-content:space-between}.icon-copy-button{width:28px;height:28px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--blue);font-size:17px;line-height:1;cursor:pointer}.icon-copy-button:hover{background:#f3f6fb}.key-secret-card{margin:14px 0 18px;padding:16px;border:1px solid #f0c6ca;border-radius:9px;background:#fff7f8}.key-secret-card strong{display:block;margin-bottom:8px;color:#a61d2a}.key-tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin:0 0 16px}.key-tab{padding:0 0 10px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font:inherit;font-weight:750;cursor:pointer}.key-tab.selected{border-color:#e60013;color:#1d2740}.key-tab-panel[hidden]{display:none}.key-optional{margin:12px 0;color:var(--muted);font-size:13px}.key-optional summary{cursor:pointer}.key-optional input{margin-top:8px}.key-test-model{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;margin-bottom:12px}.key-test-model .model-card{min-width:0}@media(max-width:760px){.summary{grid-template-columns:1fr}.key-test-model{grid-template-columns:1fr}}</style>
+  </head>
+    <style>.portal-model-browser{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:360px;border-top:1px solid var(--line)}.portal-provider-list{display:grid;align-content:start;max-height:480px;overflow:auto;padding:8px;border-right:1px solid var(--line);background:#f8faff}.portal-provider-option{width:100%;border:0;border-radius:6px;background:transparent;padding:9px 10px;color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer}.portal-provider-option:hover{background:#edf3ff}.portal-provider-option.selected{background:#dfeaff;color:var(--blue);font-weight:750}.portal-model-browser .portal-model-list{max-height:480px;padding:16px}.portal-student-offers,.manager-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}.portal-offer,.manager-offer{display:flex;align-items:center;gap:14px;padding:17px 18px;border:1px solid #d8dee9;border-radius:10px;background:#fff}.portal-offer-gemini,.manager-offer-gemini{border-left:4px solid #4285f4}.portal-offer-zed,.manager-offer-zed{border-left:4px solid #8b5cf6}.portal-offer-mark,.manager-offer-mark{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;font-size:16px;font-weight:800}.portal-offer-gemini .portal-offer-mark,.manager-offer-gemini .manager-offer-mark{background:#f1f5ff;color:#4285f4}.portal-offer-zed .portal-offer-mark,.manager-offer-zed .manager-offer-mark{background:#f4f0ff;color:#6d45d7}.portal-offer-copy,.manager-offer-copy{min-width:0;flex:1}.portal-offer-copy strong,.manager-offer-copy strong{display:block;font-size:14px}.portal-offer-copy p,.manager-offer-copy p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.45}.portal-offer-link,.manager-offer-link{color:var(--blue);font-size:13px;font-weight:750;text-decoration:none;white-space:nowrap}.portal-offer-link:hover,.manager-offer-link:hover{text-decoration:underline}@media(max-width:760px){.portal-model-browser{grid-template-columns:1fr}.portal-provider-list{grid-auto-flow:column;grid-template-rows:repeat(2,auto);overflow:auto;max-height:116px;border-right:0;border-bottom:1px solid var(--line)}.portal-provider-option{width:max-content}.portal-model-browser .portal-model-list{max-height:360px}.portal-student-offers,.manager-offers{grid-template-columns:1fr;margin-top:12px}.portal-offer,.manager-offer{align-items:flex-start;padding:16px}.portal-offer-link,.manager-offer-link{align-self:flex-end}}</style>
+<style>.portal-model-browser .portal-model-list{align-content:flex-start;align-items:flex-start;justify-content:flex-start}</style>
+<body>
+    <main id="loginScreen" class="login-screen" hidden>
+      <section class="login-brand" aria-label="ClassKeys 소개">
+        <div class="brand-mark"><img src="/jeiu_logo.svg?v=2026-09-19.2" alt="JEIU"></div>
+        <h1>ClassKeys</h1>
+        <p>수업의 OpenRouter 키와 구성원을<br>한 곳에서 관리합니다.</p>
+      </section>
+      <section class="login-panel">
+        <form id="loginForm" class="login-card">
+          <h2>로그인</h2>
+          <p>사전에 발급된 계정으로 로그인하세요.</p>
+          <label>아이디<input id="loginId" name="loginId" autocomplete="username" required></label>
+          <label>비밀번호<input id="loginPassword" name="password" type="password" autocomplete="current-password" required></label>
+          <p id="loginError" class="form-error" role="alert"></p>
+          <button class="button primary wide" type="submit">로그인</button>
+        </form>
+        <form id="setupForm" class="login-card" hidden>
+          <h2>첫 Master 계정 만들기</h2>
+          <p>배포 직후 한 번만 사용합니다.</p>
+          <label>Master 아이디<input name="loginId" autocomplete="username" pattern="[A-Za-z0-9._\-]{3,64}" required></label>
+          <label>비밀번호<input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+          <label>설정 토큰<input name="setupToken" type="password" autocomplete="off" required></label>
+          <p id="setupError" class="form-error" role="alert"></p>
+          <button class="button primary wide" type="submit">Master 계정 생성</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="appScreen" class="app-shell" hidden>
+      <aside class="sidebar">
+        <div>
+          <a class="app-brand" href="/" aria-label="ClassKeys 홈"><img class="app-logo" src="/jeiu_logo.svg?v=2026-09-19.2" alt="JEIU">ClassKeys</a>
+          <nav aria-label="주 메뉴">
+            <button class="nav-item selected" data-view="dashboard">대시보드</button>
+            <button class="nav-item" data-view="students">계정 소유자</button>
+            <button class="nav-item" data-view="teams">조 편성</button>
+            <button class="nav-item" data-view="credentials">키 관리</button>
+            <button id="personalKeysNav" class="nav-item" data-view="personalKeys" hidden>내 API 키</button>
+            <button id="modelPolicyNav" class="nav-item" data-view="modelPolicy" hidden>허용 모델</button>
+            <button id="accessPolicyNav" class="nav-item" data-view="accessPolicy" hidden>권한 설정</button>
+            <button id="auditsNav" class="nav-item" data-view="audits" hidden>감사 로그</button>
+            <button id="accountsNav" class="nav-item" data-view="accounts" hidden>계정 관리</button>
+          </nav>
+        </div>
+        <div class="account-menu">
+          <strong id="accountName"></strong>
+          <span id="currentAccountRole"></span>
+          <button id="passwordButton" class="quiet-button">비밀번호 변경</button>
+          <button id="logoutButton" class="quiet-button">로그아웃</button>
+        </div>
+      </aside>
+
+      <main id="managerApp" class="content">
+        <header class="content-header">
+          <div>
+            <h1 id="pageTitle">대시보드</h1>
+            <p id="pageDescription">수업 운영의 기본 현황을 빠르게 확인합니다.</p>
+          </div>
+          <div><button id="bulkCredentialButton" class="button ghost" hidden>개인 키 일괄 발급</button> <button id="bulkTeamCredentialButton" class="button ghost" hidden>조 키 일괄 발급</button> <button id="bulkRevokeButton" class="button ghost" hidden disabled>선택 키 폐기</button> <button id="primaryAction" class="button primary" hidden>학생 추가</button></div>
+        </header>
+        <section id="summary" class="summary" aria-label="현재 수업 현황">
+          <div><span>활성 학생</span><strong id="studentCount">—</strong><small>명</small></div>
+          <div><span>조</span><strong id="teamCount">—</strong><small>개</small></div>
+          <div><span>미편성 학생</span><strong id="unassignedCount">—</strong><small>명</small></div>
+          <div><span>활성 API 키</span><strong id="credentialCount">—</strong><small>개</small></div>
+        </section>
+        <section id="managerOffers" class="manager-offers" aria-label="학생 혜택" hidden>
+          <article class="manager-offer manager-offer-gemini"><span class="manager-offer-mark" aria-hidden="true">G</span><div class="manager-offer-copy"><strong>Google Gemini 학생 1년 무료</strong><p>학생 인증 후 Gemini 혜택을 확인할 수 있습니다. 대상·국가·약관은 Google 기준입니다.</p></div><a class="manager-offer-link" href="https://gemini.google/students/" target="_blank" rel="noopener noreferrer">혜택 확인 ↗</a></article>
+          <article class="manager-offer manager-offer-zed"><span class="manager-offer-mark" aria-hidden="true">Z</span><div class="manager-offer-copy"><strong>Zed Education · Pro 1년 무료</strong><p>인증된 대학생에게 Pro 기능과 매월 $10 AI 크레딧을 제공합니다. 자격·약관은 Zed 기준입니다.</p></div><a class="manager-offer-link" href="https://zed.dev/education" target="_blank" rel="noopener noreferrer">신청하기 ↗</a></article>
+        </section>
+        <section id="dataPanel" class="data-panel" hidden>
+          <div class="toolbar">
+            <label class="search"><span class="sr-only">검색</span><input id="searchInput" type="search" placeholder="이름, 학번, 반, 조, 지도교수로 검색"></label>
+            <select id="classFilter" aria-label="반 필터"><option value="">전체 반</option></select>
+            <label id="hideRevokedFilter" class="checkbox-filter" hidden><input id="hideRevokedKeys" type="checkbox" checked> 폐기된 키 보지 않기</label>
+            <select id="auditActionFilter" aria-label="로그 유형" hidden><option value="">전체 이벤트</option><option value="auth">인증</option><option value="student">학생</option><option value="team">조 편성</option><option value="credential">키</option><option value="account">계정</option></select>
+          </div>
+          <div id="notice" class="notice" role="status" hidden></div>
+          <div class="table-wrap">
+            <table>
+              <thead id="tableHead"></thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+          <button id="auditMoreButton" class="button ghost" hidden>이전 로그 더 보기</button>
+        </section>
+      </main>
+
+      <main id="studentPortal" class="student-portal" hidden>
+        <div class="portal-card">
+          <header class="portal-intro"><div><h1 id="portalTitle"></h1><p id="portalIntro"></p><p id="portalQuota" class="muted"></p></div><div class="portal-controls"><button id="portalLanguageToggle" class="table-button" type="button" aria-pressed="false">English</button><p id="portalPeriod" class="muted"></p></div></header>
+          <div class="portal-overview"><section class="portal-panel"><h2 id="portalBudgetTitle"></h2><div class="portal-budget-values"><strong id="portalBudgetUsed"></strong><span id="portalBudgetTotal"></span></div><div class="portal-progress" aria-hidden="true"><span id="portalBudgetProgress"></span></div><p id="portalBudgetNote" class="portal-budget-note"></p></section><section class="portal-panel"><h2 id="portalConnectionTitle"></h2><p id="portalConnectionDescription" class="portal-connect-note"></p><div class="portal-code-row"><code id="portalBaseUrl">https://openrouter.ai/api/v1</code><button id="copyPortalBaseUrlButton" class="table-button" type="button"></button></div><p id="portalConnectionNote" class="portal-connect-note"></p></section></div>
+          <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalModelTitle"></h2><p id="portalModelNote"></p></div></header><label class="portal-model-search"><span id="portalModelSearchLabel"></span><input id="portalModelSearch" type="search" autocomplete="off"></label><p id="portalModelSelected" class="portal-model-selected"></p><div class="portal-model-browser"><aside id="portalModelProviders" class="portal-provider-list" aria-label="프로바이더 목록"></aside><div id="portalAllowedModels" class="portal-model-list"></div></div></section>
+          <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalPersonalTitle"></h2><p id="portalPersonalNote"></p></div></header><div id="portalPersonalKeys" class="portal-key-list"></div></section>
+          <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalTeamTitle"></h2><p id="portalTeamNote"></p></div></header><div id="portalTeamKeys" class="portal-key-list"></div></section>
+          <section id="portalStudentOffers" class="portal-student-offers" aria-label="학생 혜택">
+            <aside class="portal-offer portal-offer-gemini"><span class="portal-offer-mark" aria-hidden="true">G</span><div class="portal-offer-copy"><strong id="portalGeminiTitle"></strong><p id="portalGeminiDescription"></p></div><a id="portalGeminiLink" class="portal-offer-link" href="https://gemini.google/students/" target="_blank" rel="noopener noreferrer"></a></aside>
+            <aside class="portal-offer portal-offer-zed"><span class="portal-offer-mark" aria-hidden="true">Z</span><div class="portal-offer-copy"><strong id="portalZedTitle"></strong><p id="portalZedDescription"></p></div><a id="portalZedLink" class="portal-offer-link" href="https://zed.dev/education" target="_blank" rel="noopener noreferrer"></a></aside>
+          </section>
+          <footer class="portal-footer"><button id="portalBackButton" class="button ghost" type="button" hidden>관리 화면</button><button id="portalLogoutButton" class="button ghost"></button></footer>
+        </div>
+      </main>
+    </div>
+
+    <dialog id="studentDetailDialog" class="dialog">
+      <section class="dialog-card">
+        <header><div><h2 id="studentDetailTitle">학생 상세</h2><p id="studentDetailMeta"></p></div><button class="close" type="button" data-close="studentDetailDialog" aria-label="닫기">×</button></header>
+        <div id="studentCredentialSections"><section class="detail-section"><div class="detail-section-head"><h3>개인 주기 한도</h3></div><p id="studentQuotaSummary" class="dialog-note">개인 한도를 불러오는 중입니다.</p><div class="form-grid"><label>한도 (USD)<input id="studentQuotaLimit" type="number" min="0" max="100000" step="0.01" value="5"></label><label>주기<select id="studentQuotaPeriod"><option value="daily">일별</option><option value="weekly" selected>주별</option><option value="monthly">월별</option></select></label></div><p class="dialog-note">정책을 저장하면 현재 개인 키는 보안을 위해 폐기됩니다. 새 키는 이 학생의 남은 예산만 사용합니다.</p><button id="saveStudentQuotaButton" class="button ghost" type="button">개인 한도 정책 저장</button></section><section class="detail-section"><div class="detail-section-head"><h3 id="studentPersonalKeysTitle">개인 키 이력</h3><button class="button primary" type="button" data-detail-issue="student">개인 키 발급</button></div><div id="studentPersonalKeys" class="member-list"></div></section><section id="studentTeamKeySection" class="detail-section"><div class="detail-section-head"><h3 id="studentTeamKeysTitle">소속 조 공용 키</h3><button class="button ghost" type="button" data-detail-issue="team">조 키 발급</button></div><div id="studentTeamKeys" class="member-list"></div></section></div>
+        <footer><button id="studentEditButton" class="button ghost" type="button" data-open-student-edit>정보 수정</button><button class="button ghost" type="button" data-close="studentDetailDialog">닫기</button></footer>
+      </section>
+    </dialog>
+    <dialog id="studentDialog" class="dialog">
+      <form id="studentForm" class="dialog-card">
+        <header><h2 id="studentDialogTitle">학생 추가</h2><button class="close" type="button" data-close="studentDialog" aria-label="닫기">×</button></header>
+        <input id="studentId" type="hidden">
+        <div class="form-grid">
+          <label>연번<input id="rosterNumber" type="number" min="1" required></label>
+          <label>학번<input id="studentNumber" maxlength="32" required></label>
+          <label>이름<input id="studentName" required></label>
+          <label>반<input id="studentClass" maxlength="32" required></label>
+          <label>지도교수<input id="studentAdvisor" required></label>
+          <label>조<select id="studentTeam"></select></label>
+          <label id="studentActiveWrap">상태<select id="studentActive"><option value="true">활성</option><option value="false">비활성</option></select></label>
+        </div>
+        <p class="dialog-note">반 또는 지도교수를 변경하려면 먼저 조 편성을 해제해야 합니다.</p>
+        <p id="studentFormError" class="form-error" role="alert"></p>
+        <footer><button id="hardDeleteStudentButton" class="button ghost" style="color:#b42318;border-color:#b42318" type="button" hidden>완전 삭제</button><button class="button ghost" type="button" data-close="studentDialog">취소</button><button class="button primary" type="submit">저장</button></footer>
+      </form>
+    </dialog>
+    <dialog id="hardDeleteStudentDialog" class="dialog">
+      <form id="hardDeleteStudentForm" class="dialog-card">
+        <header><h2>학생 완전 삭제</h2><button class="close" type="button" data-close="hardDeleteStudentDialog" aria-label="닫기">×</button></header>
+        <p class="key-warning"><strong id="hardDeleteStudentName"></strong> 학생과 개인 키·사용량·계정·편성 기록을 DB에서 완전히 삭제합니다. 되돌릴 수 없습니다.</p>
+        <label>확인을 위해 학생 이름을 정확히 입력<input id="hardDeleteConfirmName" autocomplete="off" required></label>
+        <p id="hardDeleteStudentError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="hardDeleteStudentDialog">취소</button><button class="button primary" style="background:#b42318" type="submit">완전 삭제 실행</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="teamDialog" class="dialog">
+      <form id="teamForm" class="dialog-card">
+        <header><h2>조 추가</h2><button class="close" type="button" data-close="teamDialog" aria-label="닫기">×</button></header>
+        <div class="form-grid">
+          <label>조 이름<input id="teamName" required></label>
+          <label>반<input id="teamClass" maxlength="32" required></label>
+          <label>지도교수<input id="teamAdvisor" required></label>
+        </div>
+        <p id="teamFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="teamDialog">취소</button><button class="button primary" type="submit">조 만들기</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="teamMembersDialog" class="dialog">
+      <section class="dialog-card team-members-card">
+        <header><div><h2 id="teamMembersTitle">조 상세</h2><p id="teamMembersMeta"></p></div><button class="close" type="button" data-close="teamMembersDialog" aria-label="닫기">×</button></header>
+        <div class="assign-row"><select id="assignStudent"></select><button id="assignStudentButton" class="button primary" type="button">학생 배정</button></div>
+        <div id="teamMembersList" class="member-list"></div>
+        <section id="teamCredentialSection" class="detail-section"><div class="detail-section-head"><h3>조 API 키</h3><button class="button primary" type="button" data-detail-issue="team">조 키 발급</button></div><div id="teamCredentialList" class="member-list"></div></section>
+      </section>
+    </dialog>
+
+    <dialog id="passwordDialog" class="dialog">
+      <form id="passwordForm" class="dialog-card compact-card">
+        <header><h2 id="passwordDialogTitle">비밀번호 변경</h2><button class="close" type="button" data-close="passwordDialog" aria-label="닫기">×</button></header>
+        <p id="passwordDialogNote" class="dialog-note" hidden>처음 로그인했습니다. 계속하려면 사전 발급 비밀번호를 새 비밀번호로 변경해야 합니다.</p>
+        <label>현재 비밀번호<input id="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label>새 비밀번호<input id="newPassword" type="password" autocomplete="new-password" minlength="10" required></label>
+        <label>새 비밀번호 확인<input id="newPasswordConfirm" type="password" autocomplete="new-password" minlength="10" required></label>
+        <p id="passwordFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="passwordDialog">취소</button><button class="button primary" type="submit">변경</button></footer>
+      </form>
+    </dialog>
+    <dialog id="accountDialog" class="dialog">
+      <form id="accountForm" class="dialog-card">
+        <header><h2>계정 추가</h2><button class="close" type="button" data-close="accountDialog" aria-label="닫기">×</button></header>
+        <div class="form-grid">
+          <label>구분<select id="accountRole"><option value="admin">관리자</option></select></label>
+          <label>계정 소유자<input id="accountDisplayName" maxlength="100" required></label>
+          <label>Login ID<input id="accountLoginId" maxlength="64" required></label>
+          <label>메모<textarea id="accountMemo" class="secret-output" rows="3" maxlength="1000"></textarea></label>
+        </div>
+        <p class="dialog-note">학생 계정은 학생을 추가할 때 학번을 Login ID로 하여 자동 생성됩니다. 관리자 계정의 초기 비밀번호는 수업 기본 비밀번호이며 첫 로그인 시 변경해야 합니다.</p>
+        <p id="accountFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="accountDialog">취소</button><button class="button primary" type="submit">계정 생성</button></footer>
+      </form>
+    </dialog>
+    <dialog id="accountEditDialog" class="dialog">
+      <form id="accountEditForm" class="dialog-card compact-card">
+        <header><h2>계정 정보 수정</h2><button class="close" type="button" data-close="accountEditDialog" aria-label="닫기">×</button></header>
+        <input id="accountEditId" type="hidden">
+        <label>계정 소유자<input id="accountEditDisplayName" maxlength="100" required></label>
+        <label>메모<textarea id="accountEditMemo" class="secret-output" rows="5" maxlength="1000"></textarea></label>
+        <p id="accountEditError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="accountEditDialog">취소</button><button class="button primary" type="submit">저장</button></footer>
+      </form>
+    </dialog>
+    <dialog id="credentialDialog" class="dialog">
+      <form id="credentialForm" class="dialog-card">
+        <header><h2>OpenRouter 키 발급</h2><button class="close" type="button" data-close="credentialDialog" aria-label="닫기">×</button></header>
+        <div class="form-grid">
+          <label>대상 구분<select id="credentialSubjectType"><option value="student">개인 키 (학생·관리자)</option><option value="team">조 공용 키</option></select></label>
+          <label>발급 대상<select id="credentialSubjectId" required></select></label>
+          <label>키 이름<input id="credentialLabel" maxlength="100" placeholder="비우면 대상 이름으로 생성"></label>
+          <label>기간 한도 (USD)<input id="credentialLimit" type="number" min="0" max="100000" step="0.01" required></label>
+          <label>한도 주기<select id="credentialReset"><option value="daily">일별 · KST 09:00 ~ 익일 08:59</option><option value="weekly">주별 · 월요일 09:00 ~ 다음 월요일 08:59 (KST)</option><option value="monthly">월별 · 매월 1일 09:00 ~ 다음 달 1일 08:59 (KST)</option></select></label>
+        </div>
+        <p class="dialog-note">OpenRouter는 UTC 기준으로 한도를 초기화합니다. KST로는 일별 09:00, 주별 월요일 09:00, 월별 매월 1일 09:00에 새 주기가 시작됩니다.</p>
+        <p id="credentialQuotaNote" class="dialog-note">개인 키는 계정 소유자의 주기 한도를 공유합니다. 새 키는 남은 예산만 받으며, 기존 활성 개인 키는 폐기됩니다.</p>
+        <p id="credentialFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="credentialDialog">취소</button><button class="button primary" type="submit">키 발급</button></footer>
+      </form>
+    </dialog>
+    <dialog id="keyRevealDialog" class="dialog">
+      <section class="dialog-card">
+        <header><h2 id="keyRevealTitle">OpenRouter 연결 정보</h2><button id="keyRevealCloseIcon" class="close" type="button" data-close="keyRevealDialog" aria-label="닫기">×</button></header>
+        <label id="keyRevealBaseUrlLabel">Base URL<input id="openRouterBaseUrl" readonly value="https://openrouter.ai/api/v1"></label>
+        <section class="key-secret-card"><span class="key-field-label"><strong id="keyRevealApiKeyLabelText">🔑 API 키</strong><button id="copyKeyInlineButton" class="icon-copy-button" type="button" aria-label="API 키 복사" title="API 키 복사">⧉</button></span><textarea id="revealedKey" class="secret-output" readonly aria-label="OpenRouter API 키"></textarea></section>
+        <div class="key-tabs" role="tablist"><button class="key-tab selected" type="button" role="tab" data-key-tab="connection">연결 설정</button><button class="key-tab" type="button" role="tab" data-key-tab="test">테스트</button></div>
+        <section id="keyConnectionPanel" class="key-tab-panel"><label id="keyRevealJsonLabel">연결 설정 JSON<textarea id="connectionJson" class="secret-output" readonly aria-label="OpenRouter 연결 설정 JSON"></textarea></label><button id="copyConnectionJsonButton" class="button ghost" type="button">연결 JSON 복사</button><details class="key-optional"><summary id="keyRevealChatEndpointLabel">Chat Completions Endpoint (옵션)</summary><input id="openRouterChatEndpoint" readonly value="https://openrouter.ai/api/v1/chat/completions"></details></section>
+        <section id="keyTestPanel" class="key-tab-panel" hidden><label><span id="keyTestModelLabel">테스트 모델</span><div class="key-test-model"><span id="testModelVisual"></span><input id="keyTestModel" list="keyTestModelOptions" type="search" autocomplete="off" spellcheck="false" aria-label="테스트 모델" aria-autocomplete="list"><datalist id="keyTestModelOptions"></datalist></div></label><label><span id="curlTestSnippetLabel">curl 테스트 스니펫</span><textarea id="curlTestSnippet" class="secret-output" rows="8" readonly aria-label="curl 테스트 스니펫"></textarea></label><button id="copyCurlSnippetButton" class="button ghost" type="button">curl 복사</button></section>
+        <p id="keyRevealWarning" class="key-warning">이 API 키는 비밀입니다. 외부에 공유하지 마세요.</p>
+        <footer><button id="copyKeyButton" class="button primary" type="button">API 키 복사</button><button id="keyRevealCloseButton" class="button ghost" type="button" data-close="keyRevealDialog">닫기</button></footer>
+      </section>
+    </dialog>
+    <dialog id="bulkCredentialDialog" class="dialog">
+      <form id="bulkCredentialForm" class="dialog-card">
+        <header><h2 id="bulkCredentialTitle">개인 키 일괄 발급</h2><button class="close" type="button" data-close="bulkCredentialDialog" aria-label="닫기">×</button></header>
+        <div class="form-grid">
+          <label>대상 반<select id="bulkCredentialClass"></select></label>
+          <label>기간 한도 (USD)<input id="bulkCredentialLimit" type="number" min="0" max="100000" step="0.01" required></label>
+          <label>한도 주기<select id="bulkCredentialReset"><option value="daily">일별 · KST 09:00 ~ 익일 08:59</option><option value="weekly">주별 · 월요일 09:00 ~ 다음 월요일 08:59 (KST)</option><option value="monthly">월별 · 매월 1일 09:00 ~ 다음 달 1일 08:59 (KST)</option></select></label>
+          <label id="bulkCredentialPrefixWrap">키 이름 접두어<input id="bulkCredentialPrefix" maxlength="60" placeholder="비우면 자동 규칙 적용"></label>
+        </div>
+        <p id="bulkCredentialCount" class="dialog-note"></p>
+        <p class="dialog-note">OpenRouter UTC 기준을 KST로 환산한 주기입니다. 다음 주기는 일별 09:00, 주별 월요일 09:00, 월별 매월 1일 09:00에 시작됩니다.</p>
+        <p id="bulkCredentialNote" class="dialog-note"></p>
+        <p id="bulkCredentialProgress" class="dialog-note" role="status" hidden></p>
+        <p id="bulkCredentialError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="bulkCredentialDialog">취소</button><button id="bulkCredentialSubmit" class="button primary" type="submit">일괄 발급</button></footer>
+      </form>
+    </dialog>
+    <dialog id="bulkResultDialog" class="dialog">
+      <section class="dialog-card">
+        <header><h2>일괄 발급 결과</h2><button class="close" type="button" data-close="bulkResultDialog" aria-label="닫기">×</button></header>
+        <p id="bulkResultSummary"></p>
+        <p class="key-warning">학생 이름·학번·키가 담긴 CSV입니다. 안전하게 전달한 뒤 즉시 삭제하세요.</p>
+        <footer><button id="downloadBulkCsv" class="button primary" type="button">CSV 다운로드</button><button class="button ghost" type="button" data-close="bulkResultDialog">닫기</button></footer>
+      </section>
+    </dialog>
+    <dialog id="modelPolicyDialog" class="dialog">
+      <form id="modelPolicyForm" class="dialog-card compact-card">
+        <header><h2>허용 모델 수정</h2><button class="close" type="button" data-close="modelPolicyDialog" aria-label="닫기">×</button></header>
+        <p class="dialog-note">한 줄에 하나씩 OpenRouter 모델 슬러그를 입력하세요. 저장 즉시 이 워크스페이스의 모든 학생·조 키에 적용됩니다.</p>
+        <label>허용 모델<textarea id="modelPolicyModels" class="secret-output" rows="8" spellcheck="false" placeholder="qwen/qwen3-coder-next&#10;google/gemini-2.5-flash" required></textarea></label>
+        <p class="key-warning">목록을 비우면 모델 제한이 사라질 수 있으므로 빈 목록은 저장할 수 없습니다.</p>
+        <p id="modelPolicyFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="modelPolicyDialog">취소</button><button class="button primary" type="submit">OpenRouter에 적용</button></footer>
+      </form>
+    </dialog>
+    <dialog id="auditDialog" class="dialog">
+      <section class="dialog-card">
+        <header><h2 id="auditDialogTitle">로그 상세</h2><button class="close" type="button" data-close="auditDialog" aria-label="닫기">×</button></header>
+        <textarea id="auditDetails" class="secret-output" readonly aria-label="로그 상세 정보"></textarea>
+        <footer><button class="button ghost" type="button" data-close="auditDialog">닫기</button></footer>
+      </section>
+    </dialog>
+    <script src="/app.js?v=2026-09-19.4" defer></script>
+  </body>
+</html>

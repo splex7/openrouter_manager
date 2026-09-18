@@ -1,0 +1,8 @@
+logs/
+.env
+.dev.vars
+.wrangler/
+node_modules/
+.gstack/
+*.cpuprofile
+worker-configuration.d.ts
