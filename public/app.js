@@ -65,6 +65,30 @@ function renderPortalProviderList() {
   const options = [...providers.map((provider) => [provider, provider, counts.get(provider)]), ["", portalText("전체 프로바이더", "All providers"), state.availableModels.length]];
   $("#portalModelProviders").innerHTML = options.map(([provider, label, count]) => `<button class="portal-provider-option${provider === state.portalModelProvider ? " selected" : ""}" type="button" data-portal-provider="${esc(provider)}">${esc(label)} <small>(${count})</small></button>`).join("");
 }
+function renderUsageHeatmap(id, analytics) {
+  const target = $(id);
+  if (!target) return;
+  const daily = new Map((analytics?.daily || []).map((item) => [item.date, item]));
+  const from = analytics?.range?.from || [...daily.keys()].sort()[0];
+  const to = analytics?.range?.to || [...daily.keys()].sort().pop();
+  if (!from || !to) { target.innerHTML = ""; return; }
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  const dates = [];
+  for (const cursor = new Date(start); cursor <= end && dates.length < 31; cursor.setUTCDate(cursor.getUTCDate() + 1)) dates.push(cursor.toISOString().slice(0, 10));
+  const maxCost = Math.max(0, ...dates.map((date) => Number(daily.get(date)?.costUsd || 0)));
+  const leading = start.getUTCDay();
+  const cells = Array.from({ length: leading }, () => '<span class="usage-heatmap-cell" data-level="0" aria-hidden="true"></span>');
+  for (const date of dates) {
+    const item = daily.get(date) || {};
+    const cost = Number(item.costUsd || 0);
+    const ratio = maxCost > 0 ? cost / maxCost : 0;
+    const level = cost > 0 ? Math.max(1, Math.ceil(ratio * 4)) : 0;
+    const requests = Number(item.requestCount || 0).toLocaleString("ko-KR");
+    cells.push(`<span class="usage-heatmap-cell" data-level="${level}" title="${esc(`${date} UTC · ${money(cost)} · ${requests} requests`)}" aria-label="${esc(`${date} UTC, ${money(cost)}, ${requests} requests`)}"></span>`);
+  }
+  target.innerHTML = cells.join("");
+}
 function renderPortalAnalytics() {
   const analytics = state.portalAnalytics;
   if (!analytics) return;
@@ -76,6 +100,7 @@ function renderPortalAnalytics() {
   $("#portalAnalyticsTopModels").innerHTML = analytics.topModels?.length
     ? analytics.topModels.slice(0, 5).map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || "프로바이더 미상")}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
     : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
+  renderUsageHeatmap("#portalAnalyticsHeatmap", analytics);
 }
 function renderStudentPortal() {
   const isStudent = state.me?.role === "student";
@@ -192,6 +217,7 @@ function renderAnalytics() {
   $("#analyticsTopModels").innerHTML = analytics.topModels?.length
     ? analytics.topModels.map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || "프로바이더 미상")}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
     : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
+  renderUsageHeatmap("#analyticsHeatmap", analytics);
 }
 function query() { return $("#searchInput").value.trim().toLowerCase(); }
 function relativeTime(value) {
