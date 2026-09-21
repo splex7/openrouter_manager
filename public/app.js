@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, analytics: null, dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, portalCredentials: [], portalQuota: null, portalAnalytics: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", bulkResults: [], bulkSubjectType: "student", bulkCredentialBusy: false, selectedCredentialIds: new Set(), hardDeleteStudent: null };
+const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, analytics: null, teamMetric: "costUsd", dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, portalCredentials: [], portalQuota: null, portalAnalytics: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", bulkResults: [], bulkSubjectType: "student", bulkCredentialBusy: false, selectedCredentialIds: new Set(), hardDeleteStudent: null };
 const VIEW_PATHS = Object.freeze({ dashboard: "/dashboard", students: "/students", teams: "/teams", credentials: "/keys", modelPolicy: "/models", accessPolicy: "/access", audits: "/audits", accounts: "/accounts", personalKeys: "/my-keys" });
 const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '"': "&quot;" }[c]));
 const MODEL_PROVIDERS = Object.freeze({
@@ -233,6 +233,28 @@ function renderAnalytics() {
     : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
   renderUsageHeatmap("#analyticsHeatmap", analytics);
 }
+function renderTeamAnalytics() {
+  const panel = $("#teamAnalyticsPanel");
+  const grid = $("#teamAnalyticsGrid");
+  if (!panel || !grid) return;
+  panel.hidden = state.view !== "dashboard";
+  if (state.view !== "dashboard") return;
+  const teams = state.analytics?.teams || [];
+  const metric = state.teamMetric;
+  const metricLabel = metric === "totalTokens" ? "토큰" : metric === "requestCount" ? "요청" : "비용";
+  const sorted = [...teams].sort((a, b) => Number(b[metric] || 0) - Number(a[metric] || 0));
+  const max = Math.max(0, ...sorted.map((team) => Number(team[metric] || 0)));
+  $("#teamAnalyticsPanel .team-metric-switch").querySelectorAll("[data-team-metric]").forEach((button) => button.classList.toggle("selected", button.dataset.teamMetric === metric));
+  if (!sorted.length) { grid.innerHTML = '<p class="analytics-empty">아직 집계된 조별 사용량이 없습니다.</p>'; return; }
+  const formatMetric = (value) => metric === "costUsd" ? money(value) : Number(value || 0).toLocaleString("ko-KR");
+  grid.innerHTML = sorted.map((team, index) => {
+    const value = Number(team[metric] || 0);
+    const width = max > 0 ? Math.max(2, value / max * 100) : 0;
+    const secondary = `${money(team.costUsd)} · ${Number(team.totalTokens || 0).toLocaleString("ko-KR")} 토큰 · ${Number(team.requestCount || 0).toLocaleString("ko-KR")} 요청`;
+    const sub = [team.className, team.advisorName].filter(Boolean).join(" · ");
+    return `<article class="team-usage-card" title="${esc(`${team.teamName} · ${metricLabel} ${formatMetric(value)}`)}"><div class="team-usage-head"><span class="team-usage-rank">${index + 1}</span><strong class="team-usage-name">${esc(team.teamName)}</strong></div><small class="team-usage-sub">${esc(sub || "조 정보 없음")}</small><div class="team-usage-track" aria-hidden="true"><div class="team-usage-fill" style="width:${width}%"></div></div><div class="team-usage-meta"><span class="team-usage-value">${formatMetric(value)}</span><span class="team-usage-secondary">${esc(secondary)}</span></div></article>`;
+  }).join("");
+}
 function query() { return $("#searchInput").value.trim().toLowerCase(); }
 function relativeTime(value) {
   const time = Date.parse(value || "");
@@ -319,7 +341,7 @@ function renderNavigation() {
   $("#personalKeysNav").hidden = state.me?.role === "master";
 }
 function render() {
-  renderFilters(); renderSummary(); renderAnalytics();
+  renderFilters(); renderSummary(); renderAnalytics(); renderTeamAnalytics();
   const views = { dashboard: ["대시보드", "수업 운영의 기본 현황을 빠르게 확인합니다.", ""], students: ["계정 소유자", "학생과 관리자의 개인 키·한도 및 수강생 조 편성을 관리합니다.", "학생 추가"], teams: ["조 편성", "조를 만들고 조원을 배정하거나 이동할 수 있습니다.", "조 추가"], credentials: ["키 관리", "개인·조 키를 발급하고 재발급 또는 폐기합니다.", "키 발급"], modelPolicy: ["허용 모델", "OpenRouter 워크스페이스 기본 Guardrail에 적용됩니다.", "허용 모델 수정"], accessPolicy: ["권한 설정", "관리자의 전체 키 관리 권한을 제어합니다.", ""], audits: ["감사 로그", "이벤트는 UTC 기준으로 기록하고 화면에는 KST로 표시합니다.", ""], accounts: ["계정 관리", "Master는 계정을 관리하고, 관리자는 Master를 제외한 계정의 비밀번호를 초기화할 수 있습니다.", "계정 추가"] };
   const copy = views[state.view]; $("#pageTitle").textContent = copy[0]; $("#pageDescription").textContent = state.view === "modelPolicy" && state.modelPolicy?.restrictionMode === "blocklist" ? "OpenRouter의 차단 목록이 적용 중입니다. 차단 목록은 OpenRouter에서 관리합니다." : state.view === "modelPolicy" && state.modelPolicy?.assignmentRequired ? "워크스페이스 기본 Guardrail이 없어 ClassKeys의 기존·새 키에 직접 적용됩니다." : copy[1]; $("#primaryAction").textContent = copy[2];
   const canManage = Boolean(state.me?.canManageCredentials);
@@ -514,6 +536,7 @@ $("#keyTestModel").addEventListener("input", () => { const model = $("#keyTestMo
 $("#downloadBulkCsv").addEventListener("click", () => { const rows = [["subject_type", "subject_id", "target", "openrouter_key", "result"], ...state.bulkResults.map((result) => [result.subjectType, result.subjectId, result.subjectName || "", result.key || "", result.status])]; const csv = "\uFEFF" + rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n"); const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = `classkeys-bulk-keys-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href); });
 document.addEventListener("change", (event) => { if (event.target.id === "selectAllCredentials") { const q = query(); const className = $("#classFilter").value; const activeIds = state.credentials.filter((c) => c.status === "active" && (!q || [c.subjectName, c.keyLabel, c.subjectType].join(" ").toLowerCase().includes(q)) && (!className || c.className === className)).map((c) => c.id); for (const id of activeIds) event.target.checked ? state.selectedCredentialIds.add(id) : state.selectedCredentialIds.delete(id); renderCredentials(); return; } const id = event.target.dataset.selectCredential; if (id) { event.target.checked ? state.selectedCredentialIds.add(id) : state.selectedCredentialIds.delete(id); updateBulkRevokeButton(); } });
 document.addEventListener("click", async (event) => {
+  const teamMetric = event.target.closest("[data-team-metric]"); if (teamMetric) { state.teamMetric = teamMetric.dataset.teamMetric; renderTeamAnalytics(); return; }
   const keyTab = event.target.closest("[data-key-tab]"); if (keyTab) { setKeyTab(keyTab.dataset.keyTab); return; }
   const view = event.target.closest("[data-view]"); if (view) { if (view.dataset.view === "credentials" && !state.me?.canViewCredentials) return; await navigateView(view.dataset.view); return; }
   const closer = event.target.closest("[data-close]"); if (closer) { if (closer.dataset.close === "bulkCredentialDialog" && state.bulkCredentialBusy) return; close(closer.dataset.close); return; }

@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-21.8";
+const ASSET_VERSION = "2026-09-21.9";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -442,7 +442,7 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
   if (subjectType) { conditions.push("subject_type = ?"); binds.push(subjectType); }
   if (subjectId !== null && subjectId !== undefined) { conditions.push("subject_id = ?"); binds.push(subjectId); }
   const where = conditions.join(" AND ");
-  const [summary, daily, models] = await env.DB.batch([
+  const [summary, daily, models, teams] = await env.DB.batch([
     env.DB.prepare(`
       SELECT COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
              COALESCE(SUM(request_count), 0) AS request_count,
@@ -466,9 +466,26 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
       FROM usage_daily WHERE ${where}
       GROUP BY model, provider_name ORDER BY cost_microusd DESC, request_count DESC LIMIT 10
     `).bind(...binds),
+    env.DB.prepare(`
+      SELECT usage_daily.subject_id AS team_id,
+             COALESCE(teams.name, '삭제된 조') AS team_name,
+             COALESCE(teams.class_name, '') AS class_name,
+             COALESCE(teams.advisor_name, '') AS advisor_name,
+             COALESCE(SUM(usage_daily.cost_microusd), 0) AS cost_microusd,
+             COALESCE(SUM(usage_daily.request_count), 0) AS request_count,
+             COALESCE(SUM(usage_daily.prompt_tokens), 0) AS prompt_tokens,
+             COALESCE(SUM(usage_daily.completion_tokens), 0) AS completion_tokens,
+             COALESCE(SUM(usage_daily.reasoning_tokens), 0) AS reasoning_tokens
+      FROM usage_daily
+      LEFT JOIN teams ON teams.id = usage_daily.subject_id
+      WHERE ${where} AND usage_daily.subject_type = 'team'
+      GROUP BY usage_daily.subject_id, teams.name, teams.class_name, teams.advisor_name
+      ORDER BY cost_microusd DESC, request_count DESC
+    `).bind(...binds),
   ]);
   const toUsd = (value) => Number(value || 0) / 1000000;
   const row = summary.results[0] || {};
+  const teamCostMicrousd = teams.results.reduce((total, item) => total + Number(item.cost_microusd || 0), 0);
   let liveCostUsd = 0;
   if (!Number(row.cost_microusd || 0)) {
     const credentialConditions = [];
@@ -489,6 +506,7 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
     },
     daily: daily.results.map((item) => ({ date: item.date, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0), promptTokens: Number(item.prompt_tokens || 0), completionTokens: Number(item.completion_tokens || 0), reasoningTokens: Number(item.reasoning_tokens || 0) })),
     topModels: models.results.map((item) => ({ model: item.model, providerName: item.provider_name, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
+    teams: teams.results.map((item) => ({ teamId: item.team_id, teamName: item.team_name, className: item.class_name, advisorName: item.advisor_name, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0), totalTokens: Number(item.prompt_tokens || 0) + Number(item.completion_tokens || 0) + Number(item.reasoning_tokens || 0), share: teamCostMicrousd ? Number(item.cost_microusd || 0) / teamCostMicrousd : 0 })),
   };
 }
 
