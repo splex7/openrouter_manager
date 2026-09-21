@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-21.7";
+const ASSET_VERSION = "2026-09-21.8";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -453,7 +453,10 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
     `).bind(...binds),
     env.DB.prepare(`
       SELECT usage_date_utc AS date, COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
-             COALESCE(SUM(request_count), 0) AS request_count
+             COALESCE(SUM(request_count), 0) AS request_count,
+             COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+             COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+             COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens
       FROM usage_daily WHERE ${where}
       GROUP BY usage_date_utc ORDER BY usage_date_utc
     `).bind(...binds),
@@ -484,7 +487,7 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
       costUsd, requestCount: Number(row.request_count || 0),
       promptTokens: Number(row.prompt_tokens || 0), completionTokens: Number(row.completion_tokens || 0), reasoningTokens: Number(row.reasoning_tokens || 0),
     },
-    daily: daily.results.map((item) => ({ date: item.date, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
+    daily: daily.results.map((item) => ({ date: item.date, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0), promptTokens: Number(item.prompt_tokens || 0), completionTokens: Number(item.completion_tokens || 0), reasoningTokens: Number(item.reasoning_tokens || 0) })),
     topModels: models.results.map((item) => ({ model: item.model, providerName: item.provider_name, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
   };
 }

@@ -76,6 +76,7 @@ function renderUsageHeatmap(id, analytics) {
   const end = new Date(`${to}T00:00:00Z`);
   const dates = [];
   for (const cursor = new Date(start); cursor <= end && dates.length < 31; cursor.setUTCDate(cursor.getUTCDate() + 1)) dates.push(cursor.toISOString().slice(0, 10));
+  const totalCost = dates.reduce((total, date) => total + Number(daily.get(date)?.costUsd || 0), 0);
   const maxCost = Math.max(0, ...dates.map((date) => Number(daily.get(date)?.costUsd || 0)));
   const leading = start.getUTCDay();
   const cells = Array.from({ length: leading }, () => '<span class="usage-heatmap-cell" data-level="0" aria-hidden="true"></span>');
@@ -85,9 +86,22 @@ function renderUsageHeatmap(id, analytics) {
     const ratio = maxCost > 0 ? cost / maxCost : 0;
     const level = cost > 0 ? Math.max(1, Math.ceil(ratio * 4)) : 0;
     const requests = Number(item.requestCount || 0).toLocaleString("ko-KR");
-    cells.push(`<span class="usage-heatmap-cell" data-level="${level}" title="${esc(`${date} UTC · ${money(cost)} · ${requests} requests`)}" aria-label="${esc(`${date} UTC, ${money(cost)}, ${requests} requests`)}"></span>`);
+    const tokens = Number(item.promptTokens || 0) + Number(item.completionTokens || 0) + Number(item.reasoningTokens || 0);
+    cells.push(`<span class="usage-heatmap-cell" data-date="${date}" data-cost="${cost}" data-requests="${Number(item.requestCount || 0)}" data-tokens="${tokens}" data-share="${totalCost > 0 ? cost / totalCost * 100 : 0}" data-level="${level}" tabindex="0" role="button" title="${esc(`${date} UTC · ${money(cost)} · ${requests} requests`)}" aria-label="${esc(`${date} UTC, ${money(cost)}, ${requests} requests, ${tokens.toLocaleString("ko-KR")} tokens`)}"></span>`);
   }
   target.innerHTML = cells.join("");
+  const detail = $(`${id}Detail`);
+  if (!detail) return;
+  target.querySelectorAll("[data-date]").forEach((cell) => {
+    const showDetail = () => {
+      const requests = Number(cell.dataset.requests || 0).toLocaleString("ko-KR");
+      const tokens = Number(cell.dataset.tokens || 0).toLocaleString("ko-KR");
+      const share = Number(cell.dataset.share || 0).toFixed(1);
+      detail.innerHTML = `<strong>${esc(cell.dataset.date)} UTC</strong> · ${money(cell.dataset.cost)} · ${requests} 요청 · ${tokens} 토큰 · 기간의 ${share}%`;
+    };
+    cell.addEventListener("pointerenter", showDetail);
+    cell.addEventListener("focus", showDetail);
+  });
 }
 function renderPortalAnalytics() {
   const analytics = state.portalAnalytics;

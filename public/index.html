@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>ClassKeys</title>
-    <link rel="stylesheet" href="/styles.css?v=2026-09-21.7">
-    <link rel="stylesheet" href="/logo.css?v=2026-09-21.7">
+    <link rel="stylesheet" href="/styles.css?v=2026-09-21.8">
+    <link rel="stylesheet" href="/logo.css?v=2026-09-21.8">
     <style>
       .portal-analytics{margin-top:16px;padding:20px 22px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
       .portal-analytics .portal-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
@@ -19,6 +19,9 @@
       .usage-heatmap{display:grid;grid-template-rows:repeat(7,12px);grid-auto-flow:column;grid-auto-columns:12px;gap:4px;overflow-x:auto;padding:2px 1px 4px}
       .usage-heatmap-cell{width:12px;height:12px;border-radius:3px;background:#edf0f4}
       .usage-heatmap-cell[data-level="1"]{background:#dce8fb}.usage-heatmap-cell[data-level="2"]{background:#a9c7f5}.usage-heatmap-cell[data-level="3"]{background:#6798eb}.usage-heatmap-cell[data-level="4"]{background:#2457d6}
+      .usage-heatmap-cell[tabindex="0"]{cursor:pointer}.usage-heatmap-cell[tabindex="0"]:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+      .usage-heatmap-detail{min-height:34px;margin-top:10px;padding:8px 10px;border-radius:6px;background:#f7f9fc;color:var(--muted);font-size:12px;line-height:1.45}
+      .usage-heatmap-detail strong{color:var(--text);font-weight:750}
       .usage-heatmap-legend{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:6px;color:var(--muted);font-size:10px}.usage-heatmap-legend .usage-heatmap-cell{display:inline-block}
       @media(max-width:760px){.portal-analytics{padding:16px}.portal-analytics .analytics-metrics{gap:7px}}
     </style>
@@ -33,7 +36,7 @@
 <body>
     <main id="loginScreen" class="login-screen" hidden>
       <section class="login-brand" aria-label="ClassKeys 소개">
-        <div class="brand-mark"><img src="/jeiu_logo.svg?v=2026-09-21.7" alt="JEIU"></div>
+        <div class="brand-mark"><img src="/jeiu_logo.svg?v=2026-09-21.8" alt="JEIU"></div>
         <h1>ClassKeys</h1>
         <p>수업의 OpenRouter 키와 구성원을<br>한 곳에서 관리합니다.</p>
       </section>
@@ -61,7 +64,7 @@
     <div id="appScreen" class="app-shell" hidden>
       <aside class="sidebar">
         <div>
-          <a class="app-brand" href="/" aria-label="ClassKeys 홈"><img class="app-logo" src="/jeiu_logo.svg?v=2026-09-21.7" alt="JEIU">ClassKeys</a>
+          <a class="app-brand" href="/" aria-label="ClassKeys 홈"><img class="app-logo" src="/jeiu_logo.svg?v=2026-09-21.8" alt="JEIU">ClassKeys</a>
           <nav aria-label="주 메뉴">
             <button class="nav-item selected" data-view="dashboard">대시보드</button>
             <button class="nav-item" data-view="students">계정 소유자</button>
@@ -100,7 +103,7 @@
           <header class="analytics-header"><div><h2>사용량 요약</h2><p id="analyticsRange">최근 30일 · UTC</p></div><span class="analytics-source">usage_daily</span></header>
           <div class="analytics-metrics"><div><span>총 비용</span><strong id="analyticsCost">—</strong></div><div><span>요청</span><strong id="analyticsRequests">—</strong></div><div><span>토큰</span><strong id="analyticsTokens">—</strong></div></div>
           <div class="analytics-models"><h3>상위 모델</h3><ol id="analyticsTopModels"><li class="analytics-empty">사용량을 불러오는 중입니다.</li></ol></div>
-          <div class="usage-heatmap-wrap"><div class="usage-heatmap-title"><h3>일별 사용량</h3><small>UTC · 최근 30일</small></div><div id="analyticsHeatmap" class="usage-heatmap" role="img" aria-label="최근 30일 일별 사용량 히트맵"></div><div class="usage-heatmap-legend"><span>적음</span><i class="usage-heatmap-cell" data-level="0"></i><i class="usage-heatmap-cell" data-level="1"></i><i class="usage-heatmap-cell" data-level="2"></i><i class="usage-heatmap-cell" data-level="3"></i><i class="usage-heatmap-cell" data-level="4"></i><span>많음</span></div></div>
+          <div class="usage-heatmap-wrap"><div class="usage-heatmap-title"><h3>일별 사용량</h3><small>UTC · 최근 30일</small></div><div id="analyticsHeatmap" class="usage-heatmap" role="group" aria-label="최근 30일 일별 사용량 히트맵"></div><div id="analyticsHeatmapDetail" class="usage-heatmap-detail" aria-live="polite">날짜 칸에 마우스를 올리면 상세 사용량을 확인할 수 있습니다.</div><div class="usage-heatmap-legend"><span>적음</span><i class="usage-heatmap-cell" data-level="0"></i><i class="usage-heatmap-cell" data-level="1"></i><i class="usage-heatmap-cell" data-level="2"></i><i class="usage-heatmap-cell" data-level="3"></i><i class="usage-heatmap-cell" data-level="4"></i><span>많음</span></div></div>
         </section>
         <section id="managerOffers" class="manager-offers" aria-label="학생 혜택" hidden>
           <article class="manager-offer manager-offer-gemini"><span class="manager-offer-mark" aria-hidden="true">G</span><div class="manager-offer-copy"><strong>Google Gemini 학생 1년 무료</strong><p>학생 인증 후 Gemini 혜택을 확인할 수 있습니다. 대상·국가·약관은 Google 기준입니다.</p></div><a class="manager-offer-link" href="https://gemini.google/students/" target="_blank" rel="noopener noreferrer">혜택 확인 ↗</a></article>
@@ -129,7 +132,7 @@
         <div class="portal-card">
           <header class="portal-intro"><div><h1 id="portalTitle"></h1><p id="portalIntro"></p><p id="portalQuota" class="muted"></p></div><div class="portal-controls"><button id="portalLanguageToggle" class="table-button" type="button" aria-pressed="false">English</button><p id="portalPeriod" class="muted"></p></div></header>
           <div class="portal-overview"><section class="portal-panel"><h2 id="portalBudgetTitle"></h2><div class="portal-budget-values"><strong id="portalBudgetUsed"></strong><span id="portalBudgetTotal"></span></div><div class="portal-progress" aria-hidden="true"><span id="portalBudgetProgress"></span></div><p id="portalBudgetNote" class="portal-budget-note"></p></section><section class="portal-panel"><h2 id="portalConnectionTitle"></h2><p id="portalConnectionDescription" class="portal-connect-note"></p><div class="portal-code-row"><code id="portalBaseUrl">https://openrouter.ai/api/v1</code><button id="copyPortalBaseUrlButton" class="table-button" type="button"></button></div><p id="portalConnectionNote" class="portal-connect-note"></p></section></div>
-          <section class="portal-analytics portal-key-section" aria-label="나의 사용량 요약"><header class="portal-section-head"><div><h2>나의 사용량 요약</h2><p id="portalAnalyticsRange">최근 30일 · UTC</p></div></header><div class="analytics-metrics"><div><span>총 비용</span><strong id="portalAnalyticsCost">—</strong></div><div><span>요청</span><strong id="portalAnalyticsRequests">—</strong></div><div><span>토큰</span><strong id="portalAnalyticsTokens">—</strong></div></div><div class="analytics-models"><h3>상위 모델</h3><ol id="portalAnalyticsTopModels"><li class="analytics-empty">사용량을 불러오는 중입니다.</li></ol></div><div class="usage-heatmap-wrap"><div class="usage-heatmap-title"><h3>일별 사용량</h3><small>UTC · 최근 30일</small></div><div id="portalAnalyticsHeatmap" class="usage-heatmap" role="img" aria-label="최근 30일 개인 일별 사용량 히트맵"></div><div class="usage-heatmap-legend"><span>적음</span><i class="usage-heatmap-cell" data-level="0"></i><i class="usage-heatmap-cell" data-level="1"></i><i class="usage-heatmap-cell" data-level="2"></i><i class="usage-heatmap-cell" data-level="3"></i><i class="usage-heatmap-cell" data-level="4"></i><span>많음</span></div></div></section>
+          <section class="portal-analytics portal-key-section" aria-label="나의 사용량 요약"><header class="portal-section-head"><div><h2>나의 사용량 요약</h2><p id="portalAnalyticsRange">최근 30일 · UTC</p></div></header><div class="analytics-metrics"><div><span>총 비용</span><strong id="portalAnalyticsCost">—</strong></div><div><span>요청</span><strong id="portalAnalyticsRequests">—</strong></div><div><span>토큰</span><strong id="portalAnalyticsTokens">—</strong></div></div><div class="analytics-models"><h3>상위 모델</h3><ol id="portalAnalyticsTopModels"><li class="analytics-empty">사용량을 불러오는 중입니다.</li></ol></div><div class="usage-heatmap-wrap"><div class="usage-heatmap-title"><h3>일별 사용량</h3><small>UTC · 최근 30일</small></div><div id="portalAnalyticsHeatmap" class="usage-heatmap" role="group" aria-label="최근 30일 개인 일별 사용량 히트맵"></div><div id="portalAnalyticsHeatmapDetail" class="usage-heatmap-detail" aria-live="polite">날짜 칸에 마우스를 올리면 상세 사용량을 확인할 수 있습니다.</div><div class="usage-heatmap-legend"><span>적음</span><i class="usage-heatmap-cell" data-level="0"></i><i class="usage-heatmap-cell" data-level="1"></i><i class="usage-heatmap-cell" data-level="2"></i><i class="usage-heatmap-cell" data-level="3"></i><i class="usage-heatmap-cell" data-level="4"></i><span>많음</span></div></div></section>
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalModelTitle"></h2><p id="portalModelNote"></p></div></header><label class="portal-model-search"><span id="portalModelSearchLabel"></span><input id="portalModelSearch" type="search" autocomplete="off"></label><p id="portalModelSelected" class="portal-model-selected"></p><div class="portal-model-browser"><aside id="portalModelProviders" class="portal-provider-list" aria-label="프로바이더 목록"></aside><div id="portalAllowedModels" class="portal-model-list"></div></div></section>
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalPersonalTitle"></h2><p id="portalPersonalNote"></p></div></header><div id="portalPersonalKeys" class="portal-key-list"></div></section>
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalTeamTitle"></h2><p id="portalTeamNote"></p></div></header><div id="portalTeamKeys" class="portal-key-list"></div></section>
@@ -306,6 +309,6 @@
         <footer><button class="button ghost" type="button" data-close="auditDialog">닫기</button></footer>
       </section>
     </dialog>
-    <script src="/app.js?v=2026-09-21.7" defer></script>
+    <script src="/app.js?v=2026-09-21.8" defer></script>
   </body>
 </html>
