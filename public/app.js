@@ -119,6 +119,9 @@ function renderStudentPortal() {
   $("#portalZedTitle").textContent = portalText("Zed Education · Pro 1년 무료", "Zed Education: Pro free for one year");
   $("#portalZedDescription").textContent = portalText("인증된 대학생에게 Pro 기능과 매월 $10 AI 크레딧을 제공합니다. 자격·약관은 Zed 기준입니다.", "Verified university students receive Pro features and $10/month in AI credits. Eligibility and terms are set by Zed.");
   $("#portalZedLink").textContent = portalText("Zed Education 신청 ↗", "Apply for Zed Education ↗");
+  $("#portalTypeSafeTitle").textContent = portalText("TypeSafe AI 개발 콘솔", "TypeSafe AI developer console");
+  $("#portalTypeSafeDescription").textContent = portalText("AI 개발과 실험을 위한 TypeSafe 콘솔을 확인해보세요.", "Explore TypeSafe for AI development and experimentation.");
+  $("#portalTypeSafeLink").textContent = portalText("콘솔 열기 ↗", "Open console ↗");
   $("#portalStudentOffers").hidden = !isStudent;
   $("#portalBackButton").hidden = isStudent;
 }
