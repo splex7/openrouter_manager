@@ -466,10 +466,22 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
   ]);
   const toUsd = (value) => Number(value || 0) / 1000000;
   const row = summary.results[0] || {};
+  let liveCostUsd = 0;
+  if (!Number(row.cost_microusd || 0)) {
+    const credentialConditions = [];
+    const credentialBinds = [];
+    if (subjectType) { credentialConditions.push("subject_type = ?"); credentialBinds.push(subjectType); }
+    if (subjectId !== null && subjectId !== undefined) { credentialConditions.push("subject_id = ?"); credentialBinds.push(subjectId); }
+    const credentialWhere = credentialConditions.length ? `WHERE ${credentialConditions.join(" AND ")}` : "";
+    const { results: credentials } = await env.DB.prepare(`SELECT upstream_key_ref FROM api_credentials ${credentialWhere}`).bind(...credentialBinds).all();
+    const liveUsage = await openRouterKeyUsage(env);
+    liveCostUsd = credentials.reduce((total, credential) => total + (monetaryValue(liveUsage.get(credential.upstream_key_ref)?.usage) || 0), 0);
+  }
+  const costUsd = toUsd(row.cost_microusd) || liveCostUsd;
   return {
     range: { from: fromDate, to: new Date().toISOString().slice(0, 10), days: safeDays },
     summary: {
-      costUsd: toUsd(row.cost_microusd), requestCount: Number(row.request_count || 0),
+      costUsd, requestCount: Number(row.request_count || 0),
       promptTokens: Number(row.prompt_tokens || 0), completionTokens: Number(row.completion_tokens || 0), reasoningTokens: Number(row.reasoning_tokens || 0),
     },
     daily: daily.results.map((item) => ({ date: item.date, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
