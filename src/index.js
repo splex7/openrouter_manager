@@ -489,6 +489,72 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
   };
 }
 
+function analyticsTimeRange(days = 30) {
+  const safeDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 30)));
+  const end = new Date();
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (safeDays - 1));
+  start.setUTCHours(0, 0, 0, 0);
+  return { safeDays, start: start.toISOString(), end: end.toISOString() };
+}
+
+async function syncUsageAnalytics(env, days = 30) {
+  const range = analyticsTimeRange(days);
+  const requestBody = {
+    metrics: ["request_count", "total_usage", "tokens_prompt", "tokens_completion", "reasoning_tokens"],
+    dimensions: ["model", "api_key_id"],
+    granularity: "day",
+    time_range: { start: range.start, end: range.end },
+    limit: 10000,
+  };
+  if (env.OPENROUTER_WORKSPACE_ID) requestBody.workspace_id = env.OPENROUTER_WORKSPACE_ID;
+  const response = await openRouter(env, "/analytics/query", { method: "POST", body: JSON.stringify(requestBody) });
+  const rows = Array.isArray(response?.data?.data) ? response.data.data : [];
+  const { results: credentials } = await env.DB.prepare("SELECT subject_type, subject_id, key_label, upstream_key_ref FROM api_credentials").all();
+  const credentialsByLabel = new Map(credentials.map((credential) => [String(credential.key_label), credential]));
+  const credentialsByHash = new Map(credentials.map((credential) => [String(credential.upstream_key_ref || ""), credential]));
+  const upstreamKeys = await openRouterKeyUsage(env);
+  const credentialsByUpstreamName = new Map();
+  for (const [hash, key] of upstreamKeys) {
+    const credential = credentialsByHash.get(String(hash));
+    if (credential && key?.name) credentialsByUpstreamName.set(String(key.name), credential);
+  }
+  const aggregates = new Map();
+  let skipped = 0;
+  for (const row of rows) {
+    const apiKeyId = String(row.api_key_id || "");
+    const credential = credentialsByLabel.get(apiKeyId) || credentialsByUpstreamName.get(apiKeyId);
+    const date = String(row.date__day || row.date || "").slice(0, 10);
+    const model = String(row.model || "unknown");
+    if (!credential || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped += 1; continue; }
+    const provider = model.includes("/") ? model.split("/", 1)[0] : "";
+    const key = [date, credential.subject_type, credential.subject_id, model, provider].join("\u001f");
+    const current = aggregates.get(key) || { date, subjectType: credential.subject_type, subjectId: credential.subject_id, model, provider, cost: 0, requests: 0, prompt: 0, completion: 0, reasoning: 0 };
+    current.cost += Math.max(0, Math.round(Number(row.total_usage || 0) * 1000000));
+    current.requests += Math.max(0, Math.round(Number(row.request_count || 0)));
+    current.prompt += Math.max(0, Math.round(Number(row.tokens_prompt || 0)));
+    current.completion += Math.max(0, Math.round(Number(row.tokens_completion || 0)));
+    current.reasoning += Math.max(0, Math.round(Number(row.reasoning_tokens || 0)));
+    aggregates.set(key, current);
+  }
+  const values = [...aggregates.values()];
+  for (let offset = 0; offset < values.length; offset += 50) {
+    const statements = values.slice(offset, offset + 50).map((item) => env.DB.prepare(`
+      INSERT INTO usage_daily (usage_date_utc, subject_type, subject_id, model, provider_name, cost_microusd, request_count, prompt_tokens, completion_tokens, reasoning_tokens)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (usage_date_utc, subject_type, subject_id, model, provider_name) DO UPDATE SET
+        cost_microusd = excluded.cost_microusd,
+        request_count = excluded.request_count,
+        prompt_tokens = excluded.prompt_tokens,
+        completion_tokens = excluded.completion_tokens,
+        reasoning_tokens = excluded.reasoning_tokens,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(item.date, item.subjectType, item.subjectId, item.model, item.provider, item.cost, item.requests, item.prompt, item.completion, item.reasoning));
+    if (statements.length) await env.DB.batch(statements);
+  }
+  return { range: { from: range.start.slice(0, 10), to: range.end.slice(0, 10), days: range.safeDays }, fetched: rows.length, synced: values.length, skipped };
+}
+
 async function listCredentials(env, where = "", bindings = []) {
   const { results } = await env.DB.prepare(`
     SELECT api_credentials.*,
@@ -735,6 +801,11 @@ async function audit(env, accountId, action, subjectType = null, subjectId = nul
 }
 
 export default {
+  async scheduled(controller, env, ctx) {
+    if (!env.OPENROUTER_MANAGEMENT_KEY) return;
+    ctx.waitUntil(syncUsageAnalytics(env).catch((error) => console.error("analytics_sync_failed", error instanceof Error ? error.message : error)));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
 
@@ -780,6 +851,18 @@ export default {
         return json({ data: await usageAnalytics(env, null, null, url.searchParams.get("days")) });
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "사용량 분석을 불러오지 못했습니다." }, 500);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/analytics/sync") {
+      const auth = await requireRole(request, env, ["master", "admin"]);
+      if (auth.error) return auth.error;
+      try {
+        const result = await syncUsageAnalytics(env, url.searchParams.get("days"));
+        await audit(env, auth.account.id, "analytics.sync", "workspace", null, result);
+        return json({ data: result });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "사용량 동기화에 실패했습니다." }, 502);
       }
     }
 
