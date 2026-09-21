@@ -432,6 +432,51 @@ async function studentQuota(env, studentId, usage = null) {
   };
 }
 
+async function usageAnalytics(env, subjectType = null, subjectId = null, days = 30) {
+  const safeDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 30)));
+  const from = new Date();
+  from.setUTCDate(from.getUTCDate() - (safeDays - 1));
+  const fromDate = from.toISOString().slice(0, 10);
+  const conditions = ["usage_date_utc >= ?"];
+  const binds = [fromDate];
+  if (subjectType) { conditions.push("subject_type = ?"); binds.push(subjectType); }
+  if (subjectId !== null && subjectId !== undefined) { conditions.push("subject_id = ?"); binds.push(subjectId); }
+  const where = conditions.join(" AND ");
+  const [summary, daily, models] = await env.DB.batch([
+    env.DB.prepare(`
+      SELECT COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
+             COALESCE(SUM(request_count), 0) AS request_count,
+             COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+             COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+             COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens
+      FROM usage_daily WHERE ${where}
+    `).bind(...binds),
+    env.DB.prepare(`
+      SELECT usage_date_utc AS date, COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
+             COALESCE(SUM(request_count), 0) AS request_count
+      FROM usage_daily WHERE ${where}
+      GROUP BY usage_date_utc ORDER BY usage_date_utc
+    `).bind(...binds),
+    env.DB.prepare(`
+      SELECT model, provider_name, COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
+             COALESCE(SUM(request_count), 0) AS request_count
+      FROM usage_daily WHERE ${where}
+      GROUP BY model, provider_name ORDER BY cost_microusd DESC, request_count DESC LIMIT 10
+    `).bind(...binds),
+  ]);
+  const toUsd = (value) => Number(value || 0) / 1000000;
+  const row = summary.results[0] || {};
+  return {
+    range: { from: fromDate, to: new Date().toISOString().slice(0, 10), days: safeDays },
+    summary: {
+      costUsd: toUsd(row.cost_microusd), requestCount: Number(row.request_count || 0),
+      promptTokens: Number(row.prompt_tokens || 0), completionTokens: Number(row.completion_tokens || 0), reasoningTokens: Number(row.reasoning_tokens || 0),
+    },
+    daily: daily.results.map((item) => ({ date: item.date, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
+    topModels: models.results.map((item) => ({ model: item.model, providerName: item.provider_name, costUsd: toUsd(item.cost_microusd), requestCount: Number(item.request_count || 0) })),
+  };
+}
+
 async function listCredentials(env, where = "", bindings = []) {
   const { results } = await env.DB.prepare(`
     SELECT api_credentials.*,
@@ -714,6 +759,28 @@ export default {
           activeCredentials: canManage ? Number(results[3].results[0]?.count ?? 0) : null,
         },
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/analytics/dashboard") {
+      const auth = await requireRole(request, env, ["master", "admin"]);
+      if (auth.error) return auth.error;
+      try {
+        return json({ data: await usageAnalytics(env, null, null, url.searchParams.get("days")) });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "사용량 분석을 불러오지 못했습니다." }, 500);
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/analytics/mine") {
+      const account = await currentAccount(request, env);
+      if (!account) return json({ error: "로그인이 필요합니다." }, 401);
+      if (account.must_change_password) return json({ error: "초기 비밀번호를 먼저 변경해야 합니다." }, 403);
+      if (account.role !== "student" || !account.student_id) return json({ error: "학생 개인 대시보드만 사용할 수 있습니다." }, 403);
+      try {
+        return json({ data: await usageAnalytics(env, "student", account.student_id, url.searchParams.get("days")) });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "개인 사용량 분석을 불러오지 못했습니다." }, 500);
+      }
     }
 
     if (url.pathname === "/api/model-policy") {

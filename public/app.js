@@ -1,5 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, portalCredentials: [], portalQuota: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", bulkResults: [], bulkSubjectType: "student", bulkCredentialBusy: false, selectedCredentialIds: new Set(), hardDeleteStudent: null };
+const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, analytics: null, dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, portalCredentials: [], portalQuota: null, portalAnalytics: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", bulkResults: [], bulkSubjectType: "student", bulkCredentialBusy: false, selectedCredentialIds: new Set(), hardDeleteStudent: null };
 const VIEW_PATHS = Object.freeze({ dashboard: "/dashboard", students: "/students", teams: "/teams", credentials: "/keys", modelPolicy: "/models", accessPolicy: "/access", audits: "/audits", accounts: "/accounts", personalKeys: "/my-keys" });
 const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '"': "&quot;" }[c]));
 const MODEL_PROVIDERS = Object.freeze({
@@ -65,6 +65,18 @@ function renderPortalProviderList() {
   const options = [...providers.map((provider) => [provider, provider, counts.get(provider)]), ["", portalText("전체 프로바이더", "All providers"), state.availableModels.length]];
   $("#portalModelProviders").innerHTML = options.map(([provider, label, count]) => `<button class="portal-provider-option${provider === state.portalModelProvider ? " selected" : ""}" type="button" data-portal-provider="${esc(provider)}">${esc(label)} <small>(${count})</small></button>`).join("");
 }
+function renderPortalAnalytics() {
+  const analytics = state.portalAnalytics;
+  if (!analytics) return;
+  const summary = analytics.summary || {};
+  $("#portalAnalyticsCost").textContent = money(summary.costUsd || 0);
+  $("#portalAnalyticsRequests").textContent = Number(summary.requestCount || 0).toLocaleString("ko-KR");
+  $("#portalAnalyticsTokens").textContent = Number((summary.promptTokens || 0) + (summary.completionTokens || 0) + (summary.reasoningTokens || 0)).toLocaleString("ko-KR");
+  $("#portalAnalyticsRange").textContent = analytics.range ? `${analytics.range.from} ~ ${analytics.range.to} UTC` : "최근 30일 · UTC";
+  $("#portalAnalyticsTopModels").innerHTML = analytics.topModels?.length
+    ? analytics.topModels.slice(0, 5).map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || "프로바이더 미상")}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
+    : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
+}
 function renderStudentPortal() {
   const isStudent = state.me?.role === "student";
   const name = state.me?.student?.name || state.me?.loginId || "";
@@ -74,6 +86,7 @@ function renderStudentPortal() {
   $("#portalPeriod").textContent = portalText("한도 주기: KST 경계 시각", "Limit periods use KST boundaries");
   $("#portalLogoutButton").textContent = portalText("로그아웃", "Sign out"); $("#portalLanguageToggle").textContent = english ? "🇰🇷 한국어" : "🇺🇸 English"; $("#portalLanguageToggle").setAttribute("aria-pressed", String(english));
   const quota = state.portalQuota;
+  renderPortalAnalytics();
   $("#portalBudgetTitle").textContent = portalText("이번 기간 개인 한도", "Personal limit this period");
   $("#portalQuota").textContent = quota ? portalText(`폐기·재발급 키의 사용액도 함께 계산합니다.`, `Usage from revoked and reissued keys is included.`) : portalText("아직 개인 한도 정책이 없습니다.", "No personal quota policy has been set yet.");
   $("#portalBudgetUsed").textContent = quota ? money(quota.usedUsd) : "—";
@@ -135,7 +148,7 @@ async function loadData() {
   const [students, teams, credentials = { data: [] }] = await Promise.all(requests);
   state.students = students.data; state.teams = teams.data; state.credentials = credentials.data; state.dataLoaded = true; state.selectedCredentialIds.clear(); render();
 }
-async function loadDashboard() { const response = await api("/api/dashboard"); state.dashboard = response.data; render(); }
+async function loadDashboard() { const [response, analytics] = await Promise.all([api("/api/dashboard"), api("/api/analytics/dashboard").catch(() => ({ data: null }))]); state.dashboard = response.data; state.analytics = analytics.data; render(); }
 async function ensureData() { if (state.dataLoaded) { render(); return; } await loadData(); }
 async function loadAccounts() { const response = await api("/api/accounts"); state.accounts = response.data; render(); }
 async function loadAudits(reset = true) { const offset = reset ? 0 : state.auditOffset; const response = await api(`/api/audit-events?offset=${offset}`); state.audits = reset ? response.data : [...state.audits, ...response.data]; state.auditOffset = response.nextOffset; state.auditHasMore = response.hasMore; render(); }
@@ -164,6 +177,18 @@ function renderFilters() {
 function renderSummary() {
   const data = state.dashboard || { activeStudents: activeStudents().length, activeTeams: state.teams.filter((team) => team.is_active).length, unassignedStudents: activeStudents().filter((student) => !student.team_id).length, activeCredentials: state.credentials.filter((credential) => credential.status === "active").length };
   $("#studentCount").textContent = data.activeStudents; $("#teamCount").textContent = data.activeTeams; $("#unassignedCount").textContent = data.unassignedStudents; $("#credentialCount").textContent = data.activeCredentials ?? "—";
+}
+function renderAnalytics() {
+  const analytics = state.analytics;
+  if (!analytics) return;
+  const summary = analytics.summary || {};
+  $("#analyticsCost").textContent = money(summary.costUsd || 0);
+  $("#analyticsRequests").textContent = Number(summary.requestCount || 0).toLocaleString("ko-KR");
+  $("#analyticsTokens").textContent = Number((summary.promptTokens || 0) + (summary.completionTokens || 0) + (summary.reasoningTokens || 0)).toLocaleString("ko-KR");
+  $("#analyticsRange").textContent = analytics.range ? `${analytics.range.from} ~ ${analytics.range.to} UTC` : "최근 30일 · UTC";
+  $("#analyticsTopModels").innerHTML = analytics.topModels?.length
+    ? analytics.topModels.map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || "프로바이더 미상")}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
+    : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
 }
 function query() { return $("#searchInput").value.trim().toLowerCase(); }
 function relativeTime(value) {
@@ -251,7 +276,7 @@ function renderNavigation() {
   $("#personalKeysNav").hidden = state.me?.role === "master";
 }
 function render() {
-  renderFilters(); renderSummary();
+  renderFilters(); renderSummary(); renderAnalytics();
   const views = { dashboard: ["대시보드", "수업 운영의 기본 현황을 빠르게 확인합니다.", ""], students: ["계정 소유자", "학생과 관리자의 개인 키·한도 및 수강생 조 편성을 관리합니다.", "학생 추가"], teams: ["조 편성", "조를 만들고 조원을 배정하거나 이동할 수 있습니다.", "조 추가"], credentials: ["키 관리", "개인·조 키를 발급하고 재발급 또는 폐기합니다.", "키 발급"], modelPolicy: ["허용 모델", "OpenRouter 워크스페이스 기본 Guardrail에 적용됩니다.", "허용 모델 수정"], accessPolicy: ["권한 설정", "관리자의 전체 키 관리 권한을 제어합니다.", ""], audits: ["감사 로그", "이벤트는 UTC 기준으로 기록하고 화면에는 KST로 표시합니다.", ""], accounts: ["계정 관리", "Master는 계정을 관리하고, 관리자는 Master를 제외한 계정의 비밀번호를 초기화할 수 있습니다.", "계정 추가"] };
   const copy = views[state.view]; $("#pageTitle").textContent = copy[0]; $("#pageDescription").textContent = state.view === "modelPolicy" && state.modelPolicy?.restrictionMode === "blocklist" ? "OpenRouter의 차단 목록이 적용 중입니다. 차단 목록은 OpenRouter에서 관리합니다." : state.view === "modelPolicy" && state.modelPolicy?.assignmentRequired ? "워크스페이스 기본 Guardrail이 없어 ClassKeys의 기존·새 키에 직접 적용됩니다." : copy[1]; $("#primaryAction").textContent = copy[2];
   const canManage = Boolean(state.me?.canManageCredentials);
@@ -388,8 +413,8 @@ async function refreshOpenDetails() {
 }
 async function logout() { await api("/api/auth/logout", { method: "POST" }); window.location.replace("/"); }
 async function openPersonalPortal() {
-  const { data, personalQuota, modelPolicy, availableModels, modelPricing } = await api("/api/credentials/mine");
-  state.portalCredentials = data; state.portalQuota = personalQuota; state.modelPolicy = modelPolicy; state.availableModels = availableModels || []; state.modelPricing = modelPricing || {};
+  const [{ data, personalQuota, modelPolicy, availableModels, modelPricing }, analytics] = await Promise.all([api("/api/credentials/mine"), api("/api/analytics/mine").catch(() => ({ data: null }))]);
+  state.portalCredentials = data; state.portalQuota = personalQuota; state.portalAnalytics = analytics.data; state.modelPolicy = modelPolicy; state.availableModels = availableModels || []; state.modelPricing = modelPricing || {};
   $("#managerApp").hidden = true; renderStudentPortal(); $("#studentPortal").hidden = false;
 }
 async function initialize() {
