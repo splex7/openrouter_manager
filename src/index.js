@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.7";
+const ASSET_VERSION = "2026-09-22.8";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -1677,28 +1677,38 @@ export default {
           return json({ data: { revoked: true } });
         }
         if (action === "limit" && request.method === "PATCH") {
-          if (credential.subject_type !== "team") return json({ error: "현재는 조별 키의 한도만 상향할 수 있습니다." }, 400);
-          if (credential.status !== "active") return json({ error: "활성 조별 키만 한도를 상향할 수 있습니다." }, 409);
+          if (!["team", "student"].includes(credential.subject_type)) return json({ error: "지원하지 않는 키 대상입니다." }, 400);
+          if (credential.status !== "active") return json({ error: "활성 키만 한도를 상향할 수 있습니다." }, 409);
           if (credential.provider !== "openrouter") return json({ error: "이 upstream의 키 한도 수정은 아직 지원되지 않습니다." }, 409);
           const body = await readJson(request);
           const nextLimitUsd = keyLimit(body?.limitUsd);
           const currentLimitUsd = credential.limit_microusd === null ? null : Number(credential.limit_microusd) / 1000000;
           if (currentLimitUsd === null) return json({ error: "무제한 키의 한도는 ClassKeys에서 수정할 수 없습니다." }, 400);
           if (nextLimitUsd <= currentLimitUsd) return json({ error: "새 한도는 현재 한도보다 커야 합니다. 하향은 OpenRouter에서 직접 처리하세요." }, 400);
+          let quotaBefore = null;
+          let quotaAfter = null;
+          if (credential.subject_type === "student") {
+            const policy = await studentQuotaPolicy(env, credential.subject_id);
+            if (!policy) return json({ error: "학생 개인 한도 정책을 찾을 수 없습니다." }, 409);
+            quotaBefore = Number(policy.limit_microusd) / 1000000;
+            quotaAfter = quotaBefore + (nextLimitUsd - currentLimitUsd);
+          }
           await openRouter(env, `/keys/${credential.upstream_key_ref}`, {
             method: "PATCH",
             body: JSON.stringify({ limit: nextLimitUsd }),
           });
-          await env.DB.prepare("UPDATE api_credentials SET limit_microusd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-            .bind(Math.round(nextLimitUsd * 1000000), credential.id)
-            .run();
+          const updates = [env.DB.prepare("UPDATE api_credentials SET limit_microusd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(Math.round(nextLimitUsd * 1000000), credential.id)];
+          if (credential.subject_type === "student") updates.push(env.DB.prepare("UPDATE quota_policies SET limit_microusd = ?, updated_at = CURRENT_TIMESTAMP WHERE subject_type = 'student' AND subject_id = ? AND is_active = 1").bind(Math.round(quotaAfter * 1000000), credential.subject_id));
+          await env.DB.batch(updates);
           await audit(env, account.id, "credential.limit_increase", credential.subject_type, credential.subject_id, {
             credentialId: credential.id,
             keyLabel: credential.key_label,
             before: { limitUsd: currentLimitUsd, limitReset: credential.limit_reset },
             after: { limitUsd: nextLimitUsd, limitReset: credential.limit_reset },
+            ...(quotaBefore === null ? {} : { quotaBeforeUsd: quotaBefore, quotaAfterUsd: quotaAfter }),
           });
-          return json({ data: { credentialId: credential.id, limitUsd: nextLimitUsd, limitReset: credential.limit_reset } });
+          return json({ data: { credentialId: credential.id, limitUsd: nextLimitUsd, limitReset: credential.limit_reset, quotaLimitUsd: quotaAfter } });
         }
         if (action === "reissue" && request.method === "POST") {
           if (credential.status !== "active") return json({ error: "활성 키만 재발급할 수 있습니다." }, 409);
