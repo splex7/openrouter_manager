@@ -576,7 +576,7 @@ document.addEventListener("click", async (event) => {
   const revoke = event.target.closest("[data-revoke-key]"); if (revoke) { if (!confirm("이 키를 폐기하면 다시 사용할 수 없습니다.")) return; try { await api(`/api/credentials/${revoke.dataset.revokeKey}/revoke`, { method: "POST" }); await loadData(); await refreshOpenDetails(); notice("키를 폐기했습니다."); } catch (e) { notice(e.message); } return; }
   const provider = event.target.closest("[data-portal-provider]"); if (provider) { state.portalModelProvider = provider.dataset.portalProvider; renderPortalProviderList(); renderPortalModelList(); return; }
   const model = event.target.closest("[data-portal-model]"); if (model) { state.selectedPortalModel = model.dataset.portalModel; renderPortalModelList(); return; }
-  const portal = event.target.closest("[data-portal-key]"); if (portal) { const credential = state.portalCredentials.find((c) => c.id === portal.dataset.portalKey); if (credential) { try { const { data } = await api(`/api/credentials/${credential.id}/reveal`); await showKey(data.key, "", credential.subjectType, credential.status === "revoked"); } catch (e) { notice(e.message); } } }
+  const portal = event.target.closest("[data-portal-key]"); if (portal) { const credential = state.portalCredentials.find((c) => c.id === portal.dataset.portalKey); if (credential) { try { const { data } = await api(`/api/credentials/${credential.id}/reveal`); await showKey(data.key, "", credential.subjectType, credential.status !== "active"); } catch (e) { notice(e.message); } } }
 });
 window.addEventListener("popstate", () => { if (!state.me || state.me.role === "student") return; navigateView(viewFromPath(), { updateUrl: false }); });
 initialize();
