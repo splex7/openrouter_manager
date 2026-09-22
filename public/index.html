@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <title>ClassKeys</title>
-    <link rel="stylesheet" href="/styles.css?v=2026-09-22.2">
-    <link rel="stylesheet" href="/logo.css?v=2026-09-22.2">
+    <link rel="stylesheet" href="/styles.css?v=2026-09-22.3">
+    <link rel="stylesheet" href="/logo.css?v=2026-09-22.3">
     <style>
       .portal-analytics{margin-top:16px;padding:20px 22px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
       .portal-analytics .portal-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
@@ -34,10 +34,16 @@
     <style>.portal-model-browser{display:grid;grid-template-columns:210px minmax(0,1fr);min-height:360px;border-top:1px solid var(--line)}.portal-provider-list{display:grid;align-content:start;max-height:480px;overflow:auto;padding:8px;border-right:1px solid var(--line);background:#f8faff}.portal-provider-option{width:100%;border:0;border-radius:6px;background:transparent;padding:9px 10px;color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer}.portal-provider-option:hover{background:#edf3ff}.portal-provider-option.selected{background:#dfeaff;color:var(--blue);font-weight:750}.portal-model-browser .portal-model-list{max-height:480px;padding:16px}.portal-student-offers,.manager-offers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}.portal-offer,.manager-offer{display:flex;align-items:center;gap:14px;padding:17px 18px;border:1px solid #d8dee9;border-radius:10px;background:#fff}.portal-offer-gemini,.manager-offer-gemini{border-left:4px solid #4285f4}.portal-offer-zed,.manager-offer-zed{border-left:4px solid #8b5cf6}.portal-offer-typesafe,.manager-offer-typesafe{border-left:4px solid #0ea5e9}.portal-offer-mark,.manager-offer-mark{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;font-size:16px;font-weight:800}.portal-offer-gemini .portal-offer-mark,.manager-offer-gemini .manager-offer-mark{background:#f1f5ff;color:#4285f4}.portal-offer-zed .portal-offer-mark,.manager-offer-zed .manager-offer-mark{background:#f4f0ff;color:#6d45d7}.portal-offer-typesafe .portal-offer-mark,.manager-offer-typesafe .manager-offer-mark{background:#eaf8ff;color:#0284c7}.portal-offer-copy,.manager-offer-copy{min-width:0;flex:1}.portal-offer-copy strong,.manager-offer-copy strong{display:block;font-size:14px}.portal-offer-copy p,.manager-offer-copy p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.45}.portal-offer-link,.manager-offer-link{color:var(--blue);font-size:13px;font-weight:750;text-decoration:none;white-space:nowrap}.portal-offer-link:hover,.manager-offer-link:hover{text-decoration:underline}@media(max-width:760px){.portal-model-browser{grid-template-columns:1fr}.portal-provider-list{grid-auto-flow:column;grid-template-rows:repeat(2,auto);overflow:auto;max-height:116px;border-right:0;border-bottom:1px solid var(--line)}.portal-provider-option{width:max-content}.portal-model-browser .portal-model-list{max-height:360px}.portal-student-offers,.manager-offers{grid-template-columns:1fr;margin-top:12px}.portal-offer,.manager-offer{align-items:flex-start;padding:16px}.portal-offer-link,.manager-offer-link{align-self:flex-end}}</style>
     <style>.portal-model-browser .portal-model-list{align-content:flex-start;align-items:flex-start;justify-content:flex-start}.owner-table-view th,.owner-table-view td{padding:10px 12px;font-size:13px}.owner-table-view td small{margin-top:2px;font-size:11px}.owner-table-view .table-button{font-size:12px}@media(max-width:760px){input,select{min-height:42px}.sidebar{padding:12px 16px}.app-brand{padding-bottom:12px}.sidebar nav{gap:6px}.nav-item{min-height:42px;padding:9px 10px;font-size:13px}.account-menu{grid-template-columns:1fr 1fr;gap:4px}.account-menu strong{grid-column:1/-1}.quiet-button{min-height:36px}.content{padding:20px 14px}.content-header{gap:14px}.content-header h1{font-size:28px}.content-header>div:last-child{display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.content-header .button{min-height:42px;padding:9px 10px}.summary{margin-bottom:14px}.summary div{padding:15px 16px}.summary strong{font-size:27px}.toolbar{padding:12px;gap:8px}.notice{margin:0 12px 12px}.table-wrap{-webkit-overflow-scrolling:touch}.table-wrap table{min-width:720px}.table-button{min-height:36px}.dialog{width:calc(100vw - 20px);max-height:calc(100vh - 20px)}.dialog-card{max-height:calc(100vh - 40px);padding:18px;gap:14px}.dialog-card footer{gap:7px}.dialog-card footer .button{flex:1;padding:10px 8px}.secret-output{min-height:76px}.key-tabs{gap:16px;overflow-x:auto}.key-tab{flex:none}.key-test-model{gap:8px}.portal-model-search,.portal-model-selected{padding-left:16px;padding-right:16px}.portal-model-list{padding:14px 16px}.portal-provider-option{min-height:38px}.portal-code-row{gap:8px}.portal-code-row .table-button{min-height:32px}.portal-footer{gap:8px}}</style>
 <style>@media(max-width:760px){.content-header>div:last-child{display:flex;flex-wrap:wrap;width:100%;gap:8px}.content-header>div:last-child .button{flex:1 1 calc(50% - 4px)}}</style>
+<style>
+  .portal-student-offers{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .portal-offer{display:grid;grid-template-columns:40px minmax(0,1fr);grid-template-areas:"mark copy" "mark link";align-items:start;gap:10px 14px;min-height:0;padding:20px}
+  .portal-offer-mark{grid-area:mark;margin-top:1px}.portal-offer-copy{grid-area:copy}.portal-offer-link{grid-area:link;justify-self:start;margin-top:2px}.portal-offer-copy strong{line-height:1.25}.portal-offer-copy p{max-width:38rem}
+  @media(max-width:760px){.portal-student-offers{grid-template-columns:1fr}.portal-offer{padding:17px 16px}}
+</style>
 <body>
     <main id="loginScreen" class="login-screen" hidden>
       <section class="login-brand" aria-label="ClassKeys 소개">
-        <div class="brand-mark"><img src="/jeiu_logo.svg?v=2026-09-22.2" alt="JEIU"></div>
+        <div class="brand-mark"><img src="/jeiu_logo.svg?v=2026-09-22.3" alt="JEIU"></div>
         <h1>ClassKeys</h1>
         <p>수업의 OpenRouter 키와 구성원을<br>한 곳에서 관리합니다.</p>
       </section>
@@ -65,7 +71,7 @@
     <div id="appScreen" class="app-shell" hidden>
       <aside class="sidebar">
         <div>
-          <a class="app-brand" href="/" aria-label="ClassKeys 홈"><img class="app-logo" src="/jeiu_logo.svg?v=2026-09-22.2" alt="JEIU">ClassKeys</a>
+          <a class="app-brand" href="/" aria-label="ClassKeys 홈"><img class="app-logo" src="/jeiu_logo.svg?v=2026-09-22.3" alt="JEIU">ClassKeys</a>
           <nav aria-label="주 메뉴">
             <button class="nav-item selected" data-view="dashboard">대시보드</button>
             <button class="nav-item" data-view="students">계정 소유자</button>
@@ -313,6 +319,6 @@
         <footer><button class="button ghost" type="button" data-close="auditDialog">닫기</button></footer>
       </section>
     </dialog>
-    <script src="/app.js?v=2026-09-22.2" defer></script>
+    <script src="/app.js?v=2026-09-22.3" defer></script>
   </body>
 </html>
