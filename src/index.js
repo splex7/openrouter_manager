@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.11";
+const ASSET_VERSION = "2026-09-22.12";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -952,6 +952,18 @@ export default {
         }
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "허용 모델 정책을 변경하지 못했습니다." }, 400);
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/models/allowed") {
+      const auth = await requireCredentialViewer(request, env);
+      if (auth.error) return auth.error;
+      try {
+        const policy = await workspaceModelPolicy(env);
+        const { models, pricing } = await workspaceAllowedModels(env, policy);
+        return json({ data: { models, pricing } });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "허용 모델 정보를 불러오지 못했습니다." }, 500);
       }
     }
 

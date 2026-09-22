@@ -229,6 +229,12 @@ async function loadData() {
   const [students, teams, credentials = { data: [] }] = await Promise.all(requests);
   state.students = students.data; state.teams = teams.data; state.credentials = credentials.data; state.dataLoaded = true; state.selectedCredentialIds.clear(); render();
 }
+async function loadAllowedTestModels() {
+  if (state.availableModels.length) return;
+  const { data } = await api("/api/models/allowed");
+  state.availableModels = data.models || [];
+  state.modelPricing = data.pricing || {};
+}
 async function loadDashboardAnalytics() {
   const response = await api(`/api/analytics/dashboard?period=${state.analyticsPeriod}`);
   state.analytics = response.data;
@@ -524,11 +530,11 @@ function renderPortalKeyReveal(subjectType) {
   $("#keyTestModelLabel").textContent = portalText("테스트 모델", "Test model"); $("#curlTestSnippetLabel").textContent = portalText("curl 테스트 스니펫", "curl test snippet"); $("#copyKeyButton").textContent = portalText("API 키 복사", "Copy API key"); $("#copyConnectionJsonButton").textContent = portalText("연결 JSON 복사", "Copy connection JSON"); $("#copyCurlSnippetButton").textContent = portalText("curl 복사", "Copy curl"); $("#copyKeyInlineButton").setAttribute("aria-label", portalText("API 키 복사", "Copy API key")); $("#copyKeyInlineButton").title = portalText("API 키 복사", "Copy API key"); $("#keyRevealCloseButton").textContent = portalText("닫기", "Close"); $("#keyRevealCloseIcon").setAttribute("aria-label", portalText("닫기", "Close"));
   renderRevokedKeyWarnings();
 }
-function testModels() { return state.availableModels.length ? state.availableModels : state.modelPolicy?.models || []; }
+function testModels() { return state.availableModels; }
 function updateCurlSnippet() { const key = $("#revealedKey").value; const model = $("#keyTestModel").value; $("#curlTestSnippet").value = key && model ? `curl https://openrouter.ai/api/v1/chat/completions \\\n  -H "Authorization: Bearer ${key}" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify({ model, messages: [{ role: "user", content: "ping" }] }, null, 2)}'` : "허용 모델 정보를 불러오지 못했습니다."; }
 function renderKeyTestTools() { const models = testModels(); const current = $("#keyTestModel").value; const preferred = models.includes(current) ? current : models.includes(state.selectedPortalModel) ? state.selectedPortalModel : models.find((model) => model.endsWith(":free")) || models[0] || ""; $("#keyTestModelOptions").innerHTML = models.map((model) => `<option value="${esc(model)}"></option>`).join(""); $("#keyTestModel").value = preferred; $("#keyTestModel").disabled = !models.length; $("#testModelVisual").innerHTML = preferred ? modelCard(preferred, true) : ""; updateCurlSnippet(); }
 function setKeyTab(tab) { document.querySelectorAll("[data-key-tab]").forEach((button) => button.classList.toggle("selected", button.dataset.keyTab === tab)); $("#keyConnectionPanel").hidden = tab !== "connection"; $("#keyTestPanel").hidden = tab !== "test"; }
-async function showKey(key, title, subjectType = null, revoked = false) { if (!state.modelPolicy && state.me?.role === "master") { try { state.modelPolicy = (await api("/api/model-policy")).data; } catch {} } state.revealedKeyRevoked = revoked; if (state.me?.role === "student") { state.portalRevealSubjectType = subjectType; renderPortalKeyReveal(subjectType); } else { $("#keyRevealTitle").textContent = title; renderRevokedKeyWarnings(); } $("#revealedKey").value = key; $("#connectionJson").value = JSON.stringify({ base_url: $("#openRouterBaseUrl").value, api_key: key }, null, 2); renderKeyTestTools(); setKeyTab("connection"); dialog("keyRevealDialog"); }
+async function showKey(key, title, subjectType = null, revoked = false) { if (state.me?.role !== "student") { try { await loadAllowedTestModels(); } catch (error) { notice(`허용 모델 정보를 불러오지 못했습니다: ${error.message}`); } } state.revealedKeyRevoked = revoked; if (state.me?.role === "student") { state.portalRevealSubjectType = subjectType; renderPortalKeyReveal(subjectType); } else { $("#keyRevealTitle").textContent = title; renderRevokedKeyWarnings(); } $("#revealedKey").value = key; $("#connectionJson").value = JSON.stringify({ base_url: $("#openRouterBaseUrl").value, api_key: key }, null, 2); renderKeyTestTools(); setKeyTab("connection"); dialog("keyRevealDialog"); }
 async function openTeam(teamId) {
   const { data: team } = await api(`/api/teams/${teamId}`); state.activeTeam = team; $("#teamMembersTitle").textContent = `${team.name} 조 상세`; $("#teamMembersMeta").textContent = `${team.class_name}반 · ${team.advisor_name}`;
   const candidates = activeStudents().filter((s) => s.class_name === team.class_name && s.advisor_name === team.advisor_name && s.team_id !== team.id);
