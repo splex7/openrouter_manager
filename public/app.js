@@ -316,7 +316,7 @@ function ownerKeyIcons(credentials) {
   return `<div class="owner-key-icons" aria-label="발급 키 ${credentials.length}개">${credentials.map((credential) => {
     const status = credential.status === "active" ? "사용 가능" : "폐기됨";
     const summary = `${credential.keyLabel}\n${credential.keyPreview || "키 값 없음"}\n${status} · ${credentialCreatedAt(credential.createdAt)}`;
-    return `<span class="owner-key-icon${credential.status === "active" ? "" : " revoked"}" tabindex="0" title="${esc(summary)}" aria-label="${esc(summary)}">🔑</span>`;
+    return `<span class="owner-key-icon${credential.status === "active" ? "" : " revoked"}" tabindex="0" title="${esc(summary)}" aria-label="${esc(summary)}">🔑<span class="owner-key-tooltip" role="tooltip"><strong>${esc(credential.keyLabel)}</strong><code>${esc(credential.keyPreview || "키 값 없음")}</code><small>${esc(`${status} · ${credentialCreatedAt(credential.createdAt)}`)}</small></span></span>`;
   }).join("")}</div>`;
 }
 function renderStudents() {
