@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.9";
+const ASSET_VERSION = "2026-09-22.11";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -432,16 +432,36 @@ async function studentQuota(env, studentId, usage = null) {
   };
 }
 
-async function usageAnalytics(env, subjectType = null, subjectId = null, days = 30) {
-  const safeDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 30)));
-  const from = new Date();
-  from.setUTCDate(from.getUTCDate() - (safeDays - 1));
-  const fromDate = from.toISOString().slice(0, 10);
-  const conditions = ["usage_date_utc >= ?"];
-  const binds = [fromDate];
+function analyticsPeriod(value = "month") {
+  const period = ["all", "month", "week", "rolling30"].includes(value) ? value : "month";
+  const now = new Date();
+  const toDate = now.toISOString().slice(0, 10);
+  if (period === "all") return { period, fromDate: null, toDate, label: "전체 누적 · usage_daily 적재분" };
+  const from = new Date(now);
+  if (period === "month") from.setUTCDate(1);
+  if (period === "week") from.setUTCDate(from.getUTCDate() - ((from.getUTCDay() + 6) % 7));
+  if (period === "rolling30") from.setUTCDate(from.getUTCDate() - 29);
+  return {
+    period,
+    fromDate: from.toISOString().slice(0, 10),
+    toDate,
+    label: period === "month" ? "이번 달 · UTC" : period === "week" ? "이번 주 · UTC" : "최근 30일 · UTC",
+  };
+}
+
+async function usageAnalytics(env, subjectType = null, subjectId = null, periodValue = "month") {
+  const range = analyticsPeriod(periodValue);
+  const conditions = [];
+  const binds = [];
+  if (range.fromDate) { conditions.push("usage_date_utc >= ?"); binds.push(range.fromDate); }
   if (subjectType) { conditions.push("subject_type = ?"); binds.push(subjectType); }
   if (subjectId !== null && subjectId !== undefined) { conditions.push("subject_id = ?"); binds.push(subjectId); }
-  const where = conditions.join(" AND ");
+  const where = conditions.length ? conditions.join(" AND ") : "1 = 1";
+  const heatmapFrom = new Date();
+  heatmapFrom.setUTCDate(heatmapFrom.getUTCDate() - 29);
+  const dailyConditions = range.period === "all" ? ["usage_date_utc >= ?", ...conditions] : conditions;
+  const dailyWhere = dailyConditions.length ? dailyConditions.join(" AND ") : "1 = 1";
+  const dailyBinds = range.period === "all" ? [heatmapFrom.toISOString().slice(0, 10), ...binds] : binds;
   const [summary, daily, models, teams] = await env.DB.batch([
     env.DB.prepare(`
       SELECT COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
@@ -457,14 +477,14 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
              COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
              COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
              COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens
-      FROM usage_daily WHERE ${where}
+      FROM usage_daily WHERE ${dailyWhere}
       GROUP BY usage_date_utc ORDER BY usage_date_utc
-    `).bind(...binds),
+    `).bind(...dailyBinds),
     env.DB.prepare(`
       SELECT model, provider_name, COALESCE(SUM(cost_microusd), 0) AS cost_microusd,
              COALESCE(SUM(request_count), 0) AS request_count
       FROM usage_daily WHERE ${where}
-      GROUP BY model, provider_name ORDER BY cost_microusd DESC, request_count DESC LIMIT 10
+      GROUP BY model, provider_name ORDER BY cost_microusd DESC, request_count DESC LIMIT 5
     `).bind(...binds),
     env.DB.prepare(`
       SELECT usage_daily.subject_id AS team_id,
@@ -487,7 +507,7 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
   const row = summary.results[0] || {};
   const teamCostMicrousd = teams.results.reduce((total, item) => total + Number(item.cost_microusd || 0), 0);
   let liveCostUsd = 0;
-  if (!Number(row.cost_microusd || 0)) {
+  if (!Number(row.cost_microusd || 0) && range.period === "all") {
     const credentialConditions = [];
     const credentialBinds = [];
     if (subjectType) { credentialConditions.push("subject_type = ?"); credentialBinds.push(subjectType); }
@@ -499,7 +519,7 @@ async function usageAnalytics(env, subjectType = null, subjectId = null, days = 
   }
   const costUsd = toUsd(row.cost_microusd) || liveCostUsd;
   return {
-    range: { from: fromDate, to: new Date().toISOString().slice(0, 10), days: safeDays },
+    range,
     summary: {
       costUsd, requestCount: Number(row.request_count || 0),
       promptTokens: Number(row.prompt_tokens || 0), completionTokens: Number(row.completion_tokens || 0), reasoningTokens: Number(row.reasoning_tokens || 0),
@@ -869,7 +889,7 @@ export default {
       const auth = await requireRole(request, env, ["master", "admin"]);
       if (auth.error) return auth.error;
       try {
-        return json({ data: await usageAnalytics(env, null, null, url.searchParams.get("days")) });
+        return json({ data: await usageAnalytics(env, null, null, url.searchParams.get("period") || "month") });
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "사용량 분석을 불러오지 못했습니다." }, 500);
       }
@@ -893,7 +913,7 @@ export default {
       if (account.must_change_password) return json({ error: "초기 비밀번호를 먼저 변경해야 합니다." }, 403);
       if (account.role !== "student" || !account.student_id) return json({ error: "학생 개인 대시보드만 사용할 수 있습니다." }, 403);
       try {
-        return json({ data: await usageAnalytics(env, "student", account.student_id, url.searchParams.get("days")) });
+        return json({ data: await usageAnalytics(env, "student", account.student_id, "rolling30") });
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "개인 사용량 분석을 불러오지 못했습니다." }, 500);
       }
