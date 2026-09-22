@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.12";
+const ASSET_VERSION = "2026-09-22.15";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -354,6 +354,19 @@ function periodStartUtc(period) {
   return start.toISOString();
 }
 
+function utcSql(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function nextPeriodStartSql(period, now = new Date()) {
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0);
+  if (period === "daily") start.setUTCDate(start.getUTCDate() + 1);
+  else if (period === "weekly") start.setUTCDate(start.getUTCDate() + (((8 - start.getUTCDay()) % 7) || 7));
+  else { start.setUTCMonth(start.getUTCMonth() + 1, 1); }
+  return utcSql(start);
+}
+
 async function latestSnapshotUsage(env, credentialIds, period) {
   if (!credentialIds.length) return new Map();
   const column = period === "daily" ? "usage_daily_microusd" : period === "weekly" ? "usage_weekly_microusd" : "usage_monthly_microusd";
@@ -385,6 +398,57 @@ async function snapshotCredentialUsage(env, credential, upstream) {
     Math.max(0, Math.round((monetaryValue(upstream.usage_weekly) || 0) * 1000000)),
     Math.max(0, Math.round((monetaryValue(upstream.usage_monthly) || 0) * 1000000)),
   ).run();
+}
+
+async function restorePersonalKeyLimits(env, now = new Date()) {
+  const { results } = await env.DB.prepare(`
+    SELECT credentials.id, credentials.subject_id, credentials.upstream_key_ref, credentials.key_label,
+           credentials.limit_microusd, credentials.limit_reset, credentials.limit_restore_at,
+           policies.limit_microusd AS quota_limit_microusd
+    FROM api_credentials AS credentials
+    JOIN quota_policies AS policies
+      ON policies.subject_type = 'student'
+      AND policies.subject_id = credentials.subject_id
+      AND policies.is_active = 1
+    WHERE credentials.subject_type = 'student'
+      AND credentials.status = 'active'
+      AND credentials.provider = 'openrouter'
+      AND credentials.limit_reset = policies.period
+      AND credentials.limit_microusd < policies.limit_microusd
+  `).all();
+  const currentTime = utcSql(now);
+  let scheduled = 0;
+  let restored = 0;
+  for (const credential of results) {
+    if (!credential.limit_restore_at) {
+      await env.DB.prepare("UPDATE api_credentials SET limit_restore_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND limit_restore_at IS NULL")
+        .bind(nextPeriodStartSql(credential.limit_reset, now), credential.id).run();
+      scheduled += 1;
+      continue;
+    }
+    if (credential.limit_restore_at > currentTime) continue;
+    const beforeLimitUsd = Number(credential.limit_microusd) / 1000000;
+    const quotaLimitUsd = Number(credential.quota_limit_microusd) / 1000000;
+    try {
+      await openRouter(env, `/keys/${credential.upstream_key_ref}`, {
+        method: "PATCH",
+        body: JSON.stringify({ limit: quotaLimitUsd }),
+      });
+      await env.DB.prepare("UPDATE api_credentials SET limit_microusd = ?, limit_restore_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(credential.quota_limit_microusd, credential.id).run();
+      await audit(env, null, "credential.personal_limit_restore", "student", credential.subject_id, {
+        credentialId: credential.id,
+        keyLabel: credential.key_label,
+        before: { limitUsd: beforeLimitUsd, limitReset: credential.limit_reset },
+        after: { limitUsd: quotaLimitUsd, limitReset: credential.limit_reset },
+        restoreAt: credential.limit_restore_at,
+      });
+      restored += 1;
+    } catch (error) {
+      console.error("personal_limit_restore_failed", credential.id, error instanceof Error ? error.message : error);
+    }
+  }
+  return { scheduled, restored };
 }
 
 async function studentQuotaPolicy(env, studentId) {
@@ -750,6 +814,7 @@ async function issueCredential(env, { subjectType, subjectId, label, limitUsd, l
   let limit = requestedLimit;
   let reset = requestedReset;
   let quota = null;
+  let limitRestoreAt = null;
   if (subjectType === "student") {
     const policy = await ensureStudentQuotaPolicy(env, subjectId, requestedLimit, requestedReset);
     reset = policy.period;
@@ -757,6 +822,7 @@ async function issueCredential(env, { subjectType, subjectId, label, limitUsd, l
     quota = await studentQuota(env, subjectId, usage);
     if (!quota || quota.remainingUsd <= 0) throw new Error("학생의 현재 주기 개인 한도가 모두 사용되었습니다.");
     limit = quota.remainingUsd;
+    if (limit < quota.limitUsd) limitRestoreAt = nextPeriodStartSql(reset);
     if (await activeCredentialCount(env, subjectType, subjectId) && !rotateExisting) {
       throw new Error("활성 개인 키가 이미 있습니다. 새 키가 필요하면 재발급을 사용하세요.");
     }
@@ -778,9 +844,9 @@ async function issueCredential(env, { subjectType, subjectId, label, limitUsd, l
     const modelPolicy = await workspaceModelPolicy(env);
     if (modelPolicy.assignmentRequired && modelPolicy.models.length) await assignGuardrailKeys(env, modelPolicy.guardrailId, [hash]);
     await env.DB.prepare(`
-      INSERT INTO api_credentials (id, subject_type, subject_id, issued_to_student_id, upstream_key_ref, key_label, status, limit_microusd, limit_reset, encrypted_key, provider, issue_sequence)
-      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, 'openrouter', ?)
-    `).bind(id, subjectType, subjectId, subject.issuedToStudentId, hash, name, Math.round(limit * 1000000), reset, await encryptCredentialKey(env, key), issueSequence).run();
+      INSERT INTO api_credentials (id, subject_type, subject_id, issued_to_student_id, upstream_key_ref, key_label, status, limit_microusd, limit_reset, limit_restore_at, encrypted_key, provider, issue_sequence)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, 'openrouter', ?)
+    `).bind(id, subjectType, subjectId, subject.issuedToStudentId, hash, name, Math.round(limit * 1000000), reset, limitRestoreAt, await encryptCredentialKey(env, key), issueSequence).run();
   } catch (error) {
     await openRouter(env, `/keys/${hash}`, { method: "DELETE", body: "{}" }).catch(() => {});
     throw error;
@@ -844,7 +910,10 @@ async function audit(env, accountId, action, subjectType = null, subjectId = nul
 export default {
   async scheduled(controller, env, ctx) {
     if (!env.OPENROUTER_MANAGEMENT_KEY) return;
-    ctx.waitUntil(syncUsageAnalytics(env).catch((error) => console.error("analytics_sync_failed", error instanceof Error ? error.message : error)));
+    ctx.waitUntil(Promise.all([
+      syncUsageAnalytics(env).catch((error) => console.error("analytics_sync_failed", error instanceof Error ? error.message : error)),
+      restorePersonalKeyLimits(env, new Date(controller.scheduledTime)).catch((error) => console.error("personal_limit_restore_failed", error instanceof Error ? error.message : error)),
+    ]));
   },
 
   async fetch(request, env) {

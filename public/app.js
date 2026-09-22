@@ -321,8 +321,25 @@ function relativeTime(value) {
   if (hours < 24) return `${hours}시간 전`;
   return `${Math.floor(hours / 24)}일 전`;
 }
+function ownerKeyIcons(credentials) {
+  if (!credentials.length) return "—";
+  return `<div class="owner-key-icons" aria-label="발급 키 ${credentials.length}개">${credentials.map((credential) => {
+    const status = credential.status === "active" ? "사용 가능" : "폐기됨";
+    const summary = `${credential.keyLabel}\n${credential.keyPreview || "키 값 없음"}\n${status} · ${credentialCreatedAt(credential.createdAt)}`;
+    return `<span class="owner-key-icon${credential.status === "active" ? "" : " revoked"}" tabindex="0" title="${esc(summary)}" aria-label="${esc(summary)}">🔑</span>`;
+  }).join("")}</div>`;
+}
+function ownerLastUsage(credentials) {
+  const latest = credentials.reduce((result, credential) => {
+    const time = Date.parse(credential.lastUsedAt || "");
+    return Number.isFinite(time) && (!result || time > result.time) ? { value: credential.lastUsedAt, time } : result;
+  }, null);
+  if (latest) return `<strong>${relativeTime(latest.value)}</strong><small>${kstTime(latest.value)} · 전체 발급 키 기준</small>`;
+  const hasUsage = credentials.some((credential) => credential.usageAvailable && Number(credential.usageUsd) > 0);
+  return hasUsage ? "<strong>사용 시각 미확인</strong><small>사용액은 확인됨 · 전체 발급 키 기준</small>" : "<strong>사용 기록 없음</strong><small>전체 발급 키 기준</small>";
+}
 function renderStudents() {
-  $("#tableHead").innerHTML = "<tr><th>연번</th><th>구분</th><th>이름</th><th>학번 / Login ID</th><th>소속</th><th>조</th><th>지도교수</th><th>대표 키 [수]</th><th>키 마지막 사용</th><th>키 누적 사용</th><th></th></tr>";
+  $("#tableHead").innerHTML = "<tr><th>연번</th><th>구분</th><th>이름</th><th>학번 / Login ID</th><th>소속</th><th>조</th><th>지도교수</th><th>발급 키 [수]</th><th>키 마지막 사용</th><th>키 누적 사용</th><th></th></tr>";
   const className = $("#classFilter").value; const q = query();
   const rows = state.students.filter((s) => (!q || [s.name, s.student_number, s.class_name, s.team_name, s.advisor_name].join(" ").toLowerCase().includes(q)) && (!className || s.class_name === className));
   $("#tableBody").innerHTML = rows.length ? rows.map((s) => {
@@ -332,12 +349,12 @@ function renderStudents() {
     const teamName = isAdmin ? "—" : esc(s.team_name || "—");
     const advisor = isAdmin ? "—" : esc(s.advisor_name);
     if (!state.me?.canViewCredentials) return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td><strong>비공개</strong><small>키 조회 권한 필요</small></td><td>—</td><td>—</td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
-    const personal = state.credentials.filter((c) => c.subjectType === "student" && c.subjectId === s.id && c.status === "active");
-    const team = isAdmin ? [] : state.credentials.filter((c) => c.subjectType === "team" && c.subjectId === s.team_id && c.status === "active");
-    const accessible = [...personal, ...team]; const representative = personal[0] || team[0];
+    const personal = state.credentials.filter((c) => c.subjectType === "student" && c.subjectId === s.id);
+    const team = isAdmin ? [] : state.credentials.filter((c) => c.subjectType === "team" && c.subjectId === s.team_id);
+    const issued = [...personal, ...team]; const accessible = issued.filter((credential) => credential.status === "active");
     const usage = accessible.filter((c) => c.usageAvailable).reduce((total, c) => total + (c.usageUsd || 0), 0);
     const usageKnown = accessible.some((c) => c.usageAvailable);
-    return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td><strong>${esc(representative?.keyLabel || "—")} [${accessible.length}]</strong><small><code>${esc(representative?.keyPreview || "활성 키 없음")}</code></small></td><td><strong>${relativeTime(representative?.lastUsedAt)}</strong></td><td class="usage-cell"><strong>${usageKnown ? money(usage) : "—"}</strong><small>${isAdmin ? "개인 키 합계" : "개인·조 접근 키 합계"}</small></td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
+    return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td>${ownerKeyIcons(issued)}<small>${issued.length}개 발급 · ${accessible.length}개 활성</small></td><td>${ownerLastUsage(issued)}</td><td class="usage-cell"><strong>${usageKnown ? money(usage) : "—"}</strong><small>${isAdmin ? "개인 키 합계" : "개인·조 접근 키 합계"}</small></td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
   }).join("") : "<tr><td class=\"empty\" colspan=\"11\">조건에 맞는 계정 소유자가 없습니다.</td></tr>";
 }
 function renderTeams() {
@@ -364,7 +381,7 @@ function renderAccounts() {
   $("#tableBody").innerHTML = rows.length ? rows.map((account) => `<tr><td><strong>${esc(account.ownerName)}</strong>${account.studentNumber ? `<small>개인 소유자 연결 · ${esc(account.studentNumber)}</small>` : "<small>개인 소유자 미연결</small>"}</td><td><code>${esc(account.loginId)}</code></td><td>${esc(accountRoleLabel(account.role))}</td><td><small>${esc(account.memo || "—")}</small></td><td><span class="status ${account.isActive ? "active" : "inactive"}">${account.isActive ? "활성" : "비활성"}</span><small>${account.mustChangePassword ? "초기 비밀번호 변경 필요" : "비밀번호 변경 완료"}</small></td><td><small>${account.lastLoginAt ? auditTime(account.lastLoginAt) : "로그인 기록 없음"}</small></td><td class="actions">${canManageAccounts ? `<button class="table-button" data-edit-account="${account.id}">수정</button>${account.role !== "master" ? ` <button class="table-button" data-reset-account="${account.id}">비밀번호 초기화</button> <button class="table-button ${account.isActive ? "danger" : ""}" data-toggle-account="${account.id}">${account.isActive ? "비활성화" : "활성화"}</button>` : ""}` : account.role !== "master" ? `<button class="table-button" data-reset-account="${account.id}">비밀번호 초기화</button>` : "—"}</td></tr>`).join("") : "<tr><td class=\"empty\" colspan=\"7\">등록된 계정이 없습니다.</td></tr>";
 }
 function auditLabel(action) {
-  const labels = { "account.bootstrap": "Master 계정 생성", "account.create": "계정 생성", "account.create_auto": "학생 계정 자동 생성", "account.create_bulk": "학생 계정 일괄 생성", "account.update": "계정 정보 수정", "account.password_reset": "초기 비밀번호 재설정", "account.status_update": "계정 상태 변경", "access_policy.update": "관리자 키 권한 변경", "auth.login": "로그인", "auth.login_failed": "로그인 실패", "auth.logout": "로그아웃", "auth.password_change": "비밀번호 변경", "student.create": "학생 생성", "student.update": "학생 수정", "student.deactivate": "학생 비활성화", "student.hard_delete": "학생 완전 삭제", "team.create": "조 생성", "team.update": "조 수정", "team.deactivate": "조 비활성화", "team_member.assign": "조원 배정", "team_member.remove": "조원 해제", "quota.update": "개인 한도 정책 변경", "model_policy.update": "허용 모델 정책 변경", "analytics.sync": "사용량 동기화", "credential.issue": "키 발급", "credential.issue_bulk": "키 일괄 발급", "credential.reissue": "키 재발급", "credential.limit_increase": "키 한도 상향", "credential.reveal": "키 조회", "credential.test": "키 연결 테스트", "credential.revoke": "키 폐기", "credential.revoke_bulk": "키 일괄 폐기", "credential.normalize_personal_labels": "기존 개인 키 이름 정리" };
+  const labels = { "account.bootstrap": "Master 계정 생성", "account.create": "계정 생성", "account.create_auto": "학생 계정 자동 생성", "account.create_bulk": "학생 계정 일괄 생성", "account.update": "계정 정보 수정", "account.password_reset": "초기 비밀번호 재설정", "account.status_update": "계정 상태 변경", "access_policy.update": "관리자 키 권한 변경", "auth.login": "로그인", "auth.login_failed": "로그인 실패", "auth.logout": "로그아웃", "auth.password_change": "비밀번호 변경", "student.create": "학생 생성", "student.update": "학생 수정", "student.deactivate": "학생 비활성화", "student.hard_delete": "학생 완전 삭제", "team.create": "조 생성", "team.update": "조 수정", "team.deactivate": "조 비활성화", "team_member.assign": "조원 배정", "team_member.remove": "조원 해제", "quota.update": "개인 한도 정책 변경", "model_policy.update": "허용 모델 정책 변경", "analytics.sync": "사용량 동기화", "credential.issue": "키 발급", "credential.issue_bulk": "키 일괄 발급", "credential.reissue": "키 재발급", "credential.limit_increase": "키 한도 상향", "credential.personal_limit_restore": "개인 키 기간 한도 자동 복원", "credential.reveal": "키 조회", "credential.test": "키 연결 테스트", "credential.revoke": "키 폐기", "credential.revoke_bulk": "키 일괄 폐기", "credential.normalize_personal_labels": "기존 개인 키 이름 정리" };
   return labels[action] || action;
 }
 function auditTime(value) { return kstTime(value, true); }
