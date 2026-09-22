@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.5";
+const ASSET_VERSION = "2026-09-22.7";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -1655,7 +1655,7 @@ export default {
       }
     }
 
-    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|reissue|revoke)$/);
+    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|reissue|revoke|limit)$/);
     if (credentialMatch) {
       const credentialId = credentialMatch[1];
       const action = credentialMatch[2];
@@ -1675,6 +1675,30 @@ export default {
           await revokeCredential(env, credential);
           await audit(env, account.id, "credential.revoke", credential.subject_type, credential.subject_id, { credentialId: credential.id });
           return json({ data: { revoked: true } });
+        }
+        if (action === "limit" && request.method === "PATCH") {
+          if (credential.subject_type !== "team") return json({ error: "현재는 조별 키의 한도만 상향할 수 있습니다." }, 400);
+          if (credential.status !== "active") return json({ error: "활성 조별 키만 한도를 상향할 수 있습니다." }, 409);
+          if (credential.provider !== "openrouter") return json({ error: "이 upstream의 키 한도 수정은 아직 지원되지 않습니다." }, 409);
+          const body = await readJson(request);
+          const nextLimitUsd = keyLimit(body?.limitUsd);
+          const currentLimitUsd = credential.limit_microusd === null ? null : Number(credential.limit_microusd) / 1000000;
+          if (currentLimitUsd === null) return json({ error: "무제한 키의 한도는 ClassKeys에서 수정할 수 없습니다." }, 400);
+          if (nextLimitUsd <= currentLimitUsd) return json({ error: "새 한도는 현재 한도보다 커야 합니다. 하향은 OpenRouter에서 직접 처리하세요." }, 400);
+          await openRouter(env, `/keys/${credential.upstream_key_ref}`, {
+            method: "PATCH",
+            body: JSON.stringify({ limit: nextLimitUsd }),
+          });
+          await env.DB.prepare("UPDATE api_credentials SET limit_microusd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(Math.round(nextLimitUsd * 1000000), credential.id)
+            .run();
+          await audit(env, account.id, "credential.limit_increase", credential.subject_type, credential.subject_id, {
+            credentialId: credential.id,
+            keyLabel: credential.key_label,
+            before: { limitUsd: currentLimitUsd, limitReset: credential.limit_reset },
+            after: { limitUsd: nextLimitUsd, limitReset: credential.limit_reset },
+          });
+          return json({ data: { credentialId: credential.id, limitUsd: nextLimitUsd, limitReset: credential.limit_reset } });
         }
         if (action === "reissue" && request.method === "POST") {
           if (credential.status !== "active") return json({ error: "활성 키만 재발급할 수 있습니다." }, 409);
