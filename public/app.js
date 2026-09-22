@@ -68,6 +68,7 @@ function renderPortalProviderList() {
 function renderUsageHeatmap(id, analytics) {
   const target = $(id);
   if (!target) return;
+  const personal = id.includes("portal");
   const daily = new Map((analytics?.daily || []).map((item) => [item.date, item]));
   const from = analytics?.range?.from || [...daily.keys()].sort()[0];
   const to = analytics?.range?.to || [...daily.keys()].sort().pop();
@@ -87,7 +88,9 @@ function renderUsageHeatmap(id, analytics) {
     const level = cost > 0 ? Math.max(1, Math.ceil(ratio * 4)) : 0;
     const requests = Number(item.requestCount || 0).toLocaleString("ko-KR");
     const tokens = Number(item.promptTokens || 0) + Number(item.completionTokens || 0) + Number(item.reasoningTokens || 0);
-    cells.push(`<span class="usage-heatmap-cell" data-date="${date}" data-cost="${cost}" data-requests="${Number(item.requestCount || 0)}" data-tokens="${tokens}" data-share="${totalCost > 0 ? cost / totalCost * 100 : 0}" data-level="${level}" tabindex="0" role="button" title="${esc(`${date} UTC · ${money(cost)} · ${requests} requests`)}" aria-label="${esc(`${date} UTC, ${money(cost)}, ${requests} requests, ${tokens.toLocaleString("ko-KR")} tokens`)}"></span>`);
+    const requestLabel = personal ? "requests" : "요청";
+    const tokenLabel = personal ? "tokens" : "토큰";
+    cells.push(`<span class="usage-heatmap-cell" data-date="${date}" data-cost="${cost}" data-requests="${Number(item.requestCount || 0)}" data-tokens="${tokens}" data-share="${totalCost > 0 ? cost / totalCost * 100 : 0}" data-level="${level}" tabindex="0" role="button" title="${esc(`${date} UTC · ${money(cost)} · ${requests} ${requestLabel}`)}" aria-label="${esc(`${date} UTC, ${money(cost)}, ${requests} ${requestLabel}, ${tokens.toLocaleString("ko-KR")} ${tokenLabel}`)}"></span>`);
   }
   target.innerHTML = cells.join("");
   const detail = $(`${id}Detail`);
@@ -97,7 +100,9 @@ function renderUsageHeatmap(id, analytics) {
       const requests = Number(cell.dataset.requests || 0).toLocaleString("ko-KR");
       const tokens = Number(cell.dataset.tokens || 0).toLocaleString("ko-KR");
       const share = Number(cell.dataset.share || 0).toFixed(1);
-      detail.innerHTML = `<strong>${esc(cell.dataset.date)} UTC</strong> · ${money(cell.dataset.cost)} · ${requests} 요청 · ${tokens} 토큰 · 기간의 ${share}%`;
+      detail.innerHTML = personal
+        ? `<strong>${esc(cell.dataset.date)} UTC</strong> · ${money(cell.dataset.cost)} · ${requests} requests · ${tokens} tokens · ${share}% of period`
+        : `<strong>${esc(cell.dataset.date)} UTC</strong> · ${money(cell.dataset.cost)} · ${requests} 요청 · ${tokens} 토큰 · 기간의 ${share}%`;
     };
     cell.addEventListener("pointerenter", showDetail);
     cell.addEventListener("focus", showDetail);
@@ -107,13 +112,24 @@ function renderPortalAnalytics() {
   const analytics = state.portalAnalytics;
   if (!analytics) return;
   const summary = analytics.summary || {};
+  $("#portalAnalyticsSection").setAttribute("aria-label", portalText("나의 사용량 요약", "My usage summary"));
+  $("#portalAnalyticsTitle").textContent = portalText("나의 사용량 요약", "My usage summary");
+  $("#portalAnalyticsCostLabel").textContent = portalText("총 비용", "Total cost");
+  $("#portalAnalyticsRequestsLabel").textContent = portalText("요청", "Requests");
+  $("#portalAnalyticsTokensLabel").textContent = portalText("토큰", "Tokens");
+  $("#portalAnalyticsModelsTitle").textContent = portalText("상위 모델", "Top models");
   $("#portalAnalyticsCost").textContent = money(summary.costUsd || 0);
   $("#portalAnalyticsRequests").textContent = Number(summary.requestCount || 0).toLocaleString("ko-KR");
   $("#portalAnalyticsTokens").textContent = Number((summary.promptTokens || 0) + (summary.completionTokens || 0) + (summary.reasoningTokens || 0)).toLocaleString("ko-KR");
-  $("#portalAnalyticsRange").textContent = analytics.range ? `${analytics.range.from} ~ ${analytics.range.to} UTC` : "최근 30일 · UTC";
+  $("#portalAnalyticsRange").textContent = analytics.range ? `${analytics.range.from} ~ ${analytics.range.to} UTC` : portalText("최근 30일 · UTC", "Last 30 days · UTC");
   $("#portalAnalyticsTopModels").innerHTML = analytics.topModels?.length
-    ? analytics.topModels.slice(0, 5).map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || "프로바이더 미상")}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
-    : '<li class="analytics-empty">아직 집계된 사용량이 없습니다.</li>';
+    ? analytics.topModels.slice(0, 5).map((item) => `<li><span><strong>${esc(item.model)}</strong><small>${esc(item.providerName || portalText("프로바이더 미상", "Unknown provider"))}</small></span><b>${money(item.costUsd)}</b></li>`).join("")
+    : `<li class="analytics-empty">${portalText("아직 집계된 사용량이 없습니다.", "No usage has been recorded yet.")}</li>`;
+  $("#portalAnalyticsHeatmapTitle").textContent = portalText("일별 사용량", "Daily usage");
+  $("#portalAnalyticsHeatmapRange").textContent = portalText("UTC · 최근 30일", "UTC · Last 30 days");
+  $("#portalAnalyticsHeatmap").setAttribute("aria-label", portalText("최근 30일 개인 일별 사용량 히트맵", "Personal daily usage heatmap for the last 30 days"));
+  $("#portalAnalyticsHeatmapDetail").textContent = portalText("날짜 칸에 마우스를 올리면 상세 사용량을 확인할 수 있습니다.", "Hover over a date to see detailed usage.");
+  $("#portalAnalyticsHeatmapLow").textContent = portalText("적음", "Less"); $("#portalAnalyticsHeatmapHigh").textContent = portalText("많음", "More");
   renderUsageHeatmap("#portalAnalyticsHeatmap", analytics);
 }
 function renderStudentPortal() {
@@ -123,7 +139,8 @@ function renderStudentPortal() {
   $("#portalTitle").textContent = english ? `API keys for ${name}` : `${name}님의 API 키`;
   $("#portalIntro").textContent = isStudent ? portalText("수업에서 사용할 개인 키와 소속 조의 공용 키를 확인하세요.", "Review your personal key and the shared keys for your current team.") : portalText("개인 API 키와 현재 주기 한도를 확인하세요.", "Review your personal API keys and current-period limit.");
   $("#portalPeriod").textContent = portalText("한도 주기: KST 경계 시각", "Limit periods use KST boundaries");
-  $("#portalLogoutButton").textContent = portalText("로그아웃", "Sign out"); $("#portalLanguageToggle").textContent = english ? "🇰🇷 한국어" : "🇺🇸 English"; $("#portalLanguageToggle").setAttribute("aria-pressed", String(english));
+  $("#portalLogoutButton").textContent = portalText("로그아웃", "Sign out"); $("#portalBackButton").textContent = portalText("관리 화면", "Admin dashboard"); $("#portalLanguageToggle").textContent = english ? "🇰🇷 한국어" : "🇺🇸 English"; $("#portalLanguageToggle").setAttribute("aria-pressed", String(english));
+  $("#portalAnalyticsSection").setAttribute("aria-label", portalText("나의 사용량 요약", "My usage summary")); $("#portalAnalyticsTitle").textContent = portalText("나의 사용량 요약", "My usage summary"); $("#portalAnalyticsCostLabel").textContent = portalText("총 비용", "Total cost"); $("#portalAnalyticsRequestsLabel").textContent = portalText("요청", "Requests"); $("#portalAnalyticsTokensLabel").textContent = portalText("토큰", "Tokens"); $("#portalAnalyticsModelsTitle").textContent = portalText("상위 모델", "Top models"); $("#portalAnalyticsTopModels").innerHTML = `<li class="analytics-empty">${portalText("사용량을 불러오는 중입니다.", "Loading usage…")}</li>`; $("#portalAnalyticsHeatmapTitle").textContent = portalText("일별 사용량", "Daily usage"); $("#portalAnalyticsHeatmapRange").textContent = portalText("UTC · 최근 30일", "UTC · Last 30 days"); $("#portalAnalyticsHeatmap").setAttribute("aria-label", portalText("최근 30일 개인 일별 사용량 히트맵", "Personal daily usage heatmap for the last 30 days")); $("#portalAnalyticsHeatmapDetail").textContent = portalText("날짜 칸에 마우스를 올리면 상세 사용량을 확인할 수 있습니다.", "Hover over a date to see detailed usage."); $("#portalAnalyticsHeatmapLow").textContent = portalText("적음", "Less"); $("#portalAnalyticsHeatmapHigh").textContent = portalText("많음", "More");
   const quota = state.portalQuota;
   renderPortalAnalytics();
   $("#portalBudgetTitle").textContent = portalText("이번 기간 개인 한도", "Personal limit this period");
@@ -148,6 +165,7 @@ function renderStudentPortal() {
     ? portalText(`${state.availableModels.length}개 모델이 현재 Guardrail에서 허용됩니다. 검색 후 선택하면 키 테스트에 사용됩니다.`, `${state.availableModels.length} models are allowed by the current guardrail. Search and select one to use for key testing.`)
     : portalText("사용 가능한 모델 정보를 불러오지 못했습니다. 운영자에게 문의하세요.", "Available-model information is unavailable. Contact an administrator.");
   $("#portalModelSearchLabel").textContent = portalText("모델 검색", "Search models");
+  $("#portalModelProviders").setAttribute("aria-label", portalText("프로바이더 목록", "Provider list"));
   $("#portalModelSearch").placeholder = portalText("예: gemini, qwen, :free", "e.g. gemini, qwen, :free");
   $("#portalModelSearch").value = state.portalModelSearch;
   renderPortalProviderList();
@@ -162,6 +180,7 @@ function renderStudentPortal() {
   $("#portalTypeSafeDescription").textContent = portalText("AI 개발과 실험을 위한 TypeSafe 콘솔을 확인해보세요.", "Explore TypeSafe for AI development and experimentation.");
   $("#portalTypeSafeLink").textContent = portalText("콘솔 열기 ↗", "Open console ↗");
   $("#portalStudentOffers").hidden = !isStudent;
+  $("#portalStudentOffers").setAttribute("aria-label", portalText("학생 혜택", "Student offers"));
   $("#portalBackButton").hidden = isStudent;
 }
 
