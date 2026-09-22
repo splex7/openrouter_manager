@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.17";
+const ASSET_VERSION = "2026-09-22.19";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -777,7 +777,7 @@ function canViewCredentials(account) { return account.role === "master" || accou
 async function requireCredentialManager(request, env) {
   const auth = await requireRole(request, env, ["admin", "master"]);
   if (auth.error) return auth;
-  if (!await canManageCredentials(env, auth.account)) return { error: json({ error: "키 발급·조회·재발급·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403) };
+  if (!await canManageCredentials(env, auth.account)) return { error: json({ error: "키 발급·조회·한도 상향·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403) };
   return auth;
 }
 
@@ -807,7 +807,7 @@ async function revokeActivePersonalCredentials(env, studentId, usage) {
   for (const credential of results) await revokeCredential(env, credential, usage.get(credential.upstream_key_ref));
 }
 
-async function issueCredential(env, { subjectType, subjectId, label, limitUsd, limitReset, rotateExisting = true }) {
+async function issueCredential(env, { subjectType, subjectId, label, limitUsd, limitReset }) {
   const subject = await credentialSubject(env, subjectType, subjectId);
   const requestedLimit = keyLimit(limitUsd);
   const requestedReset = keyLimitReset(limitReset);
@@ -823,10 +823,7 @@ async function issueCredential(env, { subjectType, subjectId, label, limitUsd, l
     if (!quota || quota.remainingUsd <= 0) throw new Error("학생의 현재 주기 개인 한도가 모두 사용되었습니다.");
     limit = quota.remainingUsd;
     if (limit < quota.limitUsd) limitRestoreAt = nextPeriodStartSql(reset);
-    if (await activeCredentialCount(env, subjectType, subjectId) && !rotateExisting) {
-      throw new Error("활성 개인 키가 이미 있습니다. 새 키가 필요하면 재발급을 사용하세요.");
-    }
-    if (rotateExisting) await revokeActivePersonalCredentials(env, subjectId, usage);
+    if (await activeCredentialCount(env, subjectType, subjectId)) throw new Error("활성 개인 키가 이미 있습니다. 먼저 폐기한 후 새 키를 발급하세요.");
   } else if (await activeCredentialCount(env, subjectType, subjectId) >= 2) {
     throw new Error("조마다 활성 키는 최대 2개입니다.");
   }
@@ -1692,46 +1689,6 @@ export default {
       }
     }
 
-    if (request.method === "POST" && url.pathname === "/api/credentials/bulk") {
-      const auth = await requireCredentialManager(request, env);
-      if (auth.error) return auth.error;
-      const body = await readJson(request);
-      try {
-        const subjectType = body?.subjectType === "team" ? "team" : "student";
-        const rawIds = body?.subjectIds ?? (subjectType === "student" ? body?.studentIds : []);
-        const subjectIds = Array.isArray(rawIds) ? [...new Set(rawIds.map((id) => integerId(id, subjectType === "student" ? "학생" : "조")))] : [];
-        if (!subjectIds.length || subjectIds.length > 100) throw new Error("일괄 발급 대상은 1~100개여야 합니다.");
-        const limitUsd = keyLimit(body?.limitUsd);
-        const limitReset = keyLimitReset(body?.limitReset);
-        const labelPrefix = String(body?.labelPrefix || "").trim();
-        if (labelPrefix.length > 60) throw new Error("키 이름 접두어는 60자 이하여야 합니다.");
-        const results = [];
-        for (const subjectId of subjectIds) {
-          try {
-            const target = subjectType === "student"
-              ? await env.DB.prepare("SELECT name, student_number FROM students WHERE id = ?").bind(subjectId).first()
-              : await env.DB.prepare("SELECT name, class_name FROM teams WHERE id = ?").bind(subjectId).first();
-            const targetName = subjectType === "student" ? `${target?.name || ""} · ${target?.student_number || ""}` : `${target?.name || ""} · ${target?.class_name || ""}반`;
-            const issued = await issueCredential(env, {
-              subjectType,
-              subjectId,
-            label: labelPrefix && target ? `${labelPrefix} - ${subjectType === "student" ? target.student_number : `Team-${subjectId}`}` : "",
-              limitUsd,
-              limitReset,
-              rotateExisting: subjectType !== "student",
-            });
-            results.push({ subjectType, subjectId, subjectName: targetName, status: "issued", key: issued.key, credentialId: issued.id });
-            await audit(env, auth.account.id, "credential.issue_bulk", subjectType, subjectId, { credentialId: issued.id, keyLabel: issued.record.keyLabel });
-          } catch (error) {
-            results.push({ subjectType, subjectId, status: "skipped", error: error instanceof Error ? error.message : "발급에 실패했습니다." });
-          }
-        }
-        return json({ data: results }, 201);
-      } catch (error) {
-        return json({ error: error instanceof Error ? error.message : "일괄 발급에 실패했습니다." }, 400);
-      }
-    }
-
     if (request.method === "POST" && url.pathname === "/api/credentials/revoke") {
       const auth = await requireCredentialManager(request, env);
       if (auth.error) return auth.error;
@@ -1756,7 +1713,7 @@ export default {
       }
     }
 
-    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|reissue|revoke|limit)$/);
+    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|revoke|limit)$/);
     if (credentialMatch) {
       const credentialId = credentialMatch[1];
       const action = credentialMatch[2];
@@ -1767,11 +1724,11 @@ export default {
         const credential = await findCredential(env, credentialId);
         if (action === "reveal" && request.method === "GET") {
           if (!await canReadCredential(env, account, credential)) return json({ error: "권한이 없습니다." }, 403);
-          if (!credential.encrypted_key) return json({ error: "이전 키는 평문 저장 없이 발급되어 재발급이 필요합니다." }, 409);
+          if (!credential.encrypted_key) return json({ error: "이전 키는 평문 저장 없이 발급되어 키 내용을 볼 수 없습니다. 새 키가 필요하면 기존 키를 폐기한 뒤 계정 소유자에서 발급하세요." }, 409);
           await audit(env, account.id, "credential.reveal", credential.subject_type, credential.subject_id, { credentialId: credential.id });
           return json({ data: { id: credential.id, key: await decryptCredentialKey(env, credential.encrypted_key) } });
         }
-        if (!await canManageCredentials(env, account)) return json({ error: "키 발급·조회·재발급·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403);
+        if (!await canManageCredentials(env, account)) return json({ error: "키 발급·조회·한도 상향·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403);
         if (action === "revoke" && request.method === "POST") {
           await revokeCredential(env, credential);
           await audit(env, account.id, "credential.revoke", credential.subject_type, credential.subject_id, { credentialId: credential.id });
@@ -1810,23 +1767,6 @@ export default {
             ...(quotaBefore === null ? {} : { quotaBeforeUsd: quotaBefore, quotaAfterUsd: quotaAfter }),
           });
           return json({ data: { credentialId: credential.id, limitUsd: nextLimitUsd, limitReset: credential.limit_reset, quotaLimitUsd: quotaAfter } });
-        }
-        if (action === "reissue" && request.method === "POST") {
-          if (credential.status !== "active") return json({ error: "활성 키만 재발급할 수 있습니다." }, 409);
-          if (credential.provider !== "openrouter") return json({ error: "이 upstream의 키 재발급은 아직 지원되지 않습니다." }, 409);
-          await revokeCredential(env, credential);
-          const issued = await issueCredential(env, {
-            subjectType: credential.subject_type,
-            subjectId: credential.subject_id,
-            label: /^[\x20-\x7E]+$/.test(credential.key_label) ? credential.key_label : "",
-            limitUsd: Number(credential.limit_microusd) / 1000000,
-            limitReset: credential.limit_reset,
-          });
-          await audit(env, account.id, "credential.reissue", credential.subject_type, credential.subject_id, {
-            before: { credentialId: credential.id, keyLabel: credential.key_label, limitUsd: Number(credential.limit_microusd) / 1000000, limitReset: credential.limit_reset, status: credential.status },
-            after: { credentialId: issued.id, keyLabel: issued.record.keyLabel, limitUsd: issued.record.limitUsd, limitReset: issued.record.limitReset, status: issued.record.status },
-          });
-          return json({ data: issued }, 201);
         }
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "키 작업에 실패했습니다." }, 400);
