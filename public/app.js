@@ -311,16 +311,6 @@ function renderTeamAnalytics() {
   }).join("");
 }
 function query() { return $("#searchInput").value.trim().toLowerCase(); }
-function relativeTime(value) {
-  const time = Date.parse(value || "");
-  if (!Number.isFinite(time)) return "사용 기록 없음";
-  const minutes = Math.max(0, Math.floor((Date.now() - time) / 60000));
-  if (minutes < 1) return "방금 전";
-  if (minutes < 60) return `${minutes}분 전`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  return `${Math.floor(hours / 24)}일 전`;
-}
 function ownerKeyIcons(credentials) {
   if (!credentials.length) return "—";
   return `<div class="owner-key-icons" aria-label="발급 키 ${credentials.length}개">${credentials.map((credential) => {
@@ -329,17 +319,8 @@ function ownerKeyIcons(credentials) {
     return `<span class="owner-key-icon${credential.status === "active" ? "" : " revoked"}" tabindex="0" title="${esc(summary)}" aria-label="${esc(summary)}">🔑</span>`;
   }).join("")}</div>`;
 }
-function ownerLastUsage(credentials) {
-  const latest = credentials.reduce((result, credential) => {
-    const time = Date.parse(credential.lastUsedAt || "");
-    return Number.isFinite(time) && (!result || time > result.time) ? { value: credential.lastUsedAt, time } : result;
-  }, null);
-  if (latest) return `<strong>${relativeTime(latest.value)}</strong><small>${kstTime(latest.value)} · 전체 발급 키 기준</small>`;
-  const hasUsage = credentials.some((credential) => credential.usageAvailable && Number(credential.usageUsd) > 0);
-  return hasUsage ? "<strong>사용 시각 미확인</strong><small>사용액은 확인됨 · 전체 발급 키 기준</small>" : "<strong>사용 기록 없음</strong><small>전체 발급 키 기준</small>";
-}
 function renderStudents() {
-  $("#tableHead").innerHTML = "<tr><th>연번</th><th>구분</th><th>이름</th><th>학번 / Login ID</th><th>소속</th><th>조</th><th>지도교수</th><th>발급 키 [수]</th><th>키 마지막 사용</th><th>키 누적 사용</th><th></th></tr>";
+  $("#tableHead").innerHTML = "<tr><th>연번</th><th>구분</th><th>이름</th><th>학번 / Login ID</th><th>소속</th><th>조</th><th>지도교수</th><th>발급 키 [수]</th><th>키 누적 사용</th><th></th></tr>";
   const className = $("#classFilter").value; const q = query();
   const rows = state.students.filter((s) => (!q || [s.name, s.student_number, s.class_name, s.team_name, s.advisor_name].join(" ").toLowerCase().includes(q)) && (!className || s.class_name === className));
   $("#tableBody").innerHTML = rows.length ? rows.map((s) => {
@@ -348,14 +329,14 @@ function renderStudents() {
     const affiliation = isAdmin ? "—" : `${esc(s.class_name)}반`;
     const teamName = isAdmin ? "—" : esc(s.team_name || "—");
     const advisor = isAdmin ? "—" : esc(s.advisor_name);
-    if (!state.me?.canViewCredentials) return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td><strong>비공개</strong><small>키 조회 권한 필요</small></td><td>—</td><td>—</td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
+    if (!state.me?.canViewCredentials) return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td><strong>비공개</strong><small>키 조회 권한 필요</small></td><td>—</td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
     const personal = state.credentials.filter((c) => c.subjectType === "student" && c.subjectId === s.id);
     const team = isAdmin ? [] : state.credentials.filter((c) => c.subjectType === "team" && c.subjectId === s.team_id);
     const issued = [...personal, ...team]; const accessible = issued.filter((credential) => credential.status === "active");
     const usage = accessible.filter((c) => c.usageAvailable).reduce((total, c) => total + (c.usageUsd || 0), 0);
     const usageKnown = accessible.some((c) => c.usageAvailable);
-    return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td>${ownerKeyIcons(issued)}<small>${issued.length}개 발급 · ${accessible.length}개 활성</small></td><td>${ownerLastUsage(issued)}</td><td class="usage-cell"><strong>${usageKnown ? money(usage) : "—"}</strong><small>${isAdmin ? "개인 키 합계" : "개인·조 접근 키 합계"}</small></td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
-  }).join("") : "<tr><td class=\"empty\" colspan=\"11\">조건에 맞는 계정 소유자가 없습니다.</td></tr>";
+    return `<tr><td>${s.roster_number}</td><td>${type}</td><td><strong>${esc(s.name)}</strong></td><td><code>${esc(s.student_number)}</code></td><td>${affiliation}</td><td>${teamName}</td><td>${advisor}</td><td>${ownerKeyIcons(issued)}<small>${issued.length}개 발급 · ${accessible.length}개 활성</small></td><td class="usage-cell"><strong>${usageKnown ? money(usage) : "—"}</strong><small>${isAdmin ? "개인 키 합계" : "개인·조 접근 키 합계"}</small></td><td class="actions"><button class="table-button" data-view-student="${s.id}">상세 보기</button></td></tr>`;
+  }).join("") : "<tr><td class=\"empty\" colspan=\"10\">조건에 맞는 계정 소유자가 없습니다.</td></tr>";
 }
 function renderTeams() {
   $("#tableHead").innerHTML = "<tr><th>조 이름</th><th>반</th><th>지도교수</th><th>조원</th><th>상태</th><th></th></tr>";
