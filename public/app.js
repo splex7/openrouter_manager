@@ -444,7 +444,7 @@ async function syncCredentialQuota() {
 function openCredential(subjectType = "student", subjectId = "") { $("#credentialForm").reset(); $("#credentialSubjectType").value = subjectType; $("#credentialLimit").value = "5"; $("#credentialReset").value = "weekly"; error("#credentialFormError"); renderCredentialSubjects(); $("#credentialSubjectId").value = String(subjectId); $("#credentialQuotaNote").textContent = "개인 키는 계정 소유자의 주기 한도를 공유합니다. 새 키는 남은 예산만 받으며, 기존 활성 개인 키는 폐기됩니다."; syncCredentialQuota(); dialog("credentialDialog"); }
 function openCredentialLimit(credentialId) {
   const credential = state.credentials.find((item) => item.id === credentialId);
-  if (!credential || credential.subjectType !== "team" || credential.status !== "active") return;
+  if (!credential || !["team", "student"].includes(credential.subjectType) || credential.status !== "active") return;
   state.limitCredential = credential;
   const personal = credential.subjectType === "student";
   $("#credentialLimitDialog h2").textContent = personal ? "개인 키 한도 상향" : "조별 키 한도 상향";
