@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.19";
+const ASSET_VERSION = "2026-09-22.20";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
 
@@ -415,17 +415,11 @@ async function restorePersonalKeyLimits(env, now = new Date()) {
       AND credentials.provider = 'openrouter'
       AND credentials.limit_reset = policies.period
       AND credentials.limit_microusd < policies.limit_microusd
+      AND credentials.limit_restore_at IS NOT NULL
   `).all();
   const currentTime = utcSql(now);
-  let scheduled = 0;
   let restored = 0;
   for (const credential of results) {
-    if (!credential.limit_restore_at) {
-      await env.DB.prepare("UPDATE api_credentials SET limit_restore_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND limit_restore_at IS NULL")
-        .bind(nextPeriodStartSql(credential.limit_reset, now), credential.id).run();
-      scheduled += 1;
-      continue;
-    }
     if (credential.limit_restore_at > currentTime) continue;
     const beforeLimitUsd = Number(credential.limit_microusd) / 1000000;
     const quotaLimitUsd = Number(credential.quota_limit_microusd) / 1000000;
@@ -448,7 +442,7 @@ async function restorePersonalKeyLimits(env, now = new Date()) {
       console.error("personal_limit_restore_failed", credential.id, error instanceof Error ? error.message : error);
     }
   }
-  return { scheduled, restored };
+  return { scheduled: 0, restored };
 }
 
 async function studentQuotaPolicy(env, studentId) {
@@ -720,6 +714,17 @@ async function findCredential(env, credentialId) {
   const row = await env.DB.prepare("SELECT * FROM api_credentials WHERE id = ?").bind(credentialId).first();
   if (!row) throw new Error("키 기록을 찾을 수 없습니다.");
   return row;
+}
+
+async function openRouterCredentialLimit(env, credential) {
+  if (credential.provider !== "openrouter") throw new Error("이 upstream의 키 한도 동기화는 아직 지원되지 않습니다.");
+  const upstream = (await openRouterKeyUsage(env, true)).get(credential.upstream_key_ref);
+  if (!upstream) throw new Error("OpenRouter에서 이 키를 찾을 수 없습니다.");
+  if (!Object.hasOwn(upstream, "limit")) throw new Error("OpenRouter의 실제 키 한도를 확인할 수 없습니다.");
+  if (upstream.limit === null) return null;
+  const limitUsd = monetaryValue(upstream.limit);
+  if (limitUsd === null) throw new Error("OpenRouter의 실제 키 한도가 올바르지 않습니다.");
+  return limitUsd;
 }
 
 async function revokeCredential(env, credential, upstream = null) {
@@ -1713,7 +1718,7 @@ export default {
       }
     }
 
-    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|revoke|limit)$/);
+    const credentialMatch = url.pathname.match(/^\/api\/credentials\/([\w-]+)\/(reveal|revoke|limit|sync)$/);
     if (credentialMatch) {
       const credentialId = credentialMatch[1];
       const action = credentialMatch[2];
@@ -1728,7 +1733,40 @@ export default {
           await audit(env, account.id, "credential.reveal", credential.subject_type, credential.subject_id, { credentialId: credential.id });
           return json({ data: { id: credential.id, key: await decryptCredentialKey(env, credential.encrypted_key) } });
         }
-        if (!await canManageCredentials(env, account)) return json({ error: "키 발급·조회·한도 상향·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403);
+        if (!await canManageCredentials(env, account)) return json({ error: "키 발급·조회·한도 확인·상향·폐기는 관리자 또는 Master만 할 수 있습니다." }, 403);
+        if (action === "sync" && request.method === "GET") {
+          const classKeysLimitUsd = credential.limit_microusd === null ? null : Number(credential.limit_microusd) / 1000000;
+          const openRouterLimitUsd = await openRouterCredentialLimit(env, credential);
+          const matches = classKeysLimitUsd === openRouterLimitUsd;
+          await audit(env, account.id, "credential.limit_check", credential.subject_type, credential.subject_id, {
+            credentialId: credential.id,
+            keyLabel: credential.key_label,
+            classKeysLimitUsd,
+            openRouterLimitUsd,
+            matches,
+          });
+          return json({ data: { credentialId: credential.id, classKeysLimitUsd, openRouterLimitUsd, matches } });
+        }
+        if (action === "sync" && request.method === "POST") {
+          const classKeysLimitUsd = credential.limit_microusd === null ? null : Number(credential.limit_microusd) / 1000000;
+          const openRouterLimitUsd = await openRouterCredentialLimit(env, credential);
+          const changed = classKeysLimitUsd !== openRouterLimitUsd;
+          if (changed) {
+            await env.DB.prepare("UPDATE api_credentials SET limit_microusd = ?, limit_restore_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+              .bind(openRouterLimitUsd === null ? null : Math.round(openRouterLimitUsd * 1000000), credential.id).run();
+          }
+          await audit(env, account.id, "credential.limit_sync", credential.subject_type, credential.subject_id, {
+            credentialId: credential.id,
+            keyLabel: credential.key_label,
+            before: { limitUsd: classKeysLimitUsd },
+            after: { limitUsd: openRouterLimitUsd },
+            source: "openrouter",
+            changed,
+            quotaChanged: false,
+            limitRestoreCleared: changed,
+          });
+          return json({ data: { credentialId: credential.id, classKeysLimitUsd: openRouterLimitUsd, openRouterLimitUsd, matches: true, changed } });
+        }
         if (action === "revoke" && request.method === "POST") {
           await revokeCredential(env, credential);
           await audit(env, account.id, "credential.revoke", credential.subject_type, credential.subject_id, { credentialId: credential.id });
