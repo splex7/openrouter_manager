@@ -1,7 +1,7 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-23.1";
+const ASSET_VERSION = "2026-09-23.2";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
 const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/promotions", "/my-keys"]);
 
@@ -1208,7 +1208,7 @@ export default {
         return json({ data: results.map(promotionRecord) });
       }
       if (request.method === "POST") {
-        if (!["admin", "master"].includes(auth.account.role)) return json({ error: "프로모션 배너는 관리자 또는 Master만 관리할 수 있습니다." }, 403);
+        if (auth.account.role !== "master") return json({ error: "프로모션 배너는 Master만 관리할 수 있습니다." }, 403);
         try {
           const promotion = promotionInput(await readJson(request));
           const id = crypto.randomUUID();
@@ -1231,7 +1231,7 @@ export default {
 
     const promotionMatch = url.pathname.match(/^\/api\/promotions\/([\w-]+)$/);
     if (promotionMatch) {
-      const auth = await requireRole(request, env, ["admin", "master"]);
+      const auth = await requireRole(request, env, ["master"]);
       if (auth.error) return auth.error;
       const promotionId = promotionMatch[1];
       try {

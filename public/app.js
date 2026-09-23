@@ -268,7 +268,7 @@ function viewFromPath() { return Object.entries(VIEW_PATHS).find(([, path]) => p
 function setViewPath(view, replace = false) { const path = VIEW_PATHS[view] || VIEW_PATHS.dashboard; if (window.location.pathname !== path) history[replace ? "replaceState" : "pushState"]({}, "", path); }
 async function navigateView(view, { replace = false, updateUrl = true } = {}) {
   if (view === "personalKeys" && state.me?.role === "master") view = "dashboard";
-  if (view === "promotions" && !["admin", "master"].includes(state.me?.role)) view = "dashboard";
+  if (view === "promotions" && state.me?.role !== "master") view = "dashboard";
   if (!VIEW_PATHS[view]) view = "dashboard";
   if (updateUrl) setViewPath(view, replace);
   if (view === "personalKeys") { state.view = view; document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("selected", button.dataset.view === view)); await openPersonalPortal(); return; }
@@ -418,7 +418,7 @@ function renderPromotions() {
   $("#tableBody").innerHTML = rows.length ? rows.map((promotion) => `<tr><td><strong>${esc(promotion.titleKo)}</strong><small>${esc(promotion.titleEn)}</small></td><td><a href="${esc(promotion.linkUrl)}" target="_blank" rel="noopener noreferrer">${esc(promotion.linkLabelKo)} ↗</a><small>${esc(promotion.linkLabelEn)}</small></td><td><small>${kstTime(promotion.updatedAt || promotion.createdAt)}</small></td><td class="actions"><button class="table-button" data-edit-promotion="${promotion.id}">수정</button> <button class="table-button danger" data-delete-promotion="${promotion.id}">삭제</button></td></tr>`).join("") : "<tr><td class=\"empty\" colspan=\"4\">등록된 프로모션 배너가 없습니다.</td></tr>";
 }
 function renderNavigation() {
-  document.querySelector('[data-view="credentials"]').hidden = !state.me?.canViewCredentials; $("#accountsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#promotionsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#auditsNav").hidden = state.me?.role !== "master"; $("#modelPolicyNav").hidden = state.me?.role !== "master"; $("#accessPolicyNav").hidden = true;
+  document.querySelector('[data-view="credentials"]').hidden = !state.me?.canViewCredentials; $("#accountsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#promotionsNav").hidden = state.me?.role !== "master"; $("#auditsNav").hidden = state.me?.role !== "master"; $("#modelPolicyNav").hidden = state.me?.role !== "master"; $("#accessPolicyNav").hidden = true;
   $("#personalKeysNav").hidden = state.me?.role === "master";
 }
 function render() {
