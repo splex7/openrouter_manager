@@ -41,6 +41,7 @@
   .portal-student-offers{grid-template-columns:repeat(2,minmax(0,1fr))}
   .portal-offer{display:grid;grid-template-columns:40px minmax(0,1fr);grid-template-areas:"mark copy" "mark link";align-items:start;gap:10px 14px;min-height:0;padding:20px}
   .portal-offer-mark{grid-area:mark;margin-top:1px}.portal-offer-copy{grid-area:copy}.portal-offer-link{grid-area:link;justify-self:start;margin-top:2px}.portal-offer-copy strong{line-height:1.25}.portal-offer-copy p{max-width:38rem}
+  .portal-student-offers,.manager-offers{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}.promotion-card .portal-offer-mark,.promotion-card .manager-offer-mark{background:#f1f5ff;color:#2457d6}
   @media(max-width:760px){.portal-student-offers{grid-template-columns:1fr}.portal-offer{padding:17px 16px}}
 </style>
 <body>
@@ -83,6 +84,7 @@
             <button id="personalKeysNav" class="nav-item" data-view="personalKeys" hidden>내 API 키</button>
             <button id="modelPolicyNav" class="nav-item" data-view="modelPolicy" hidden>허용 모델</button>
             <button id="accessPolicyNav" class="nav-item" data-view="accessPolicy" hidden>권한 설정</button>
+            <button id="promotionsNav" class="nav-item" data-view="promotions" hidden>프로모션 배너</button>
             <button id="auditsNav" class="nav-item" data-view="audits" hidden>감사 로그</button>
             <button id="accountsNav" class="nav-item" data-view="accounts" hidden>계정 관리</button>
           </nav>
@@ -119,11 +121,7 @@
           <header class="team-analytics-header"><div><h2>조별 사용량 비교</h2><p id="teamAnalyticsRange">조 공용 키 기준 · 이번 달 · UTC</p></div><div class="team-metric-switch" role="group" aria-label="비교 지표"><button type="button" class="selected" data-team-metric="costUsd">비용</button><button type="button" data-team-metric="totalTokens">토큰</button><button type="button" data-team-metric="requestCount">요청</button></div></header>
           <div id="teamAnalyticsGrid" class="team-analytics-grid"><p class="analytics-empty">조별 사용량을 불러오는 중입니다.</p></div>
         </section>
-        <section id="managerOffers" class="manager-offers" aria-label="학생 혜택" hidden>
-          <article class="manager-offer manager-offer-gemini"><span class="manager-offer-mark" aria-hidden="true">G</span><div class="manager-offer-copy"><strong>Google Gemini 학생 1년 무료</strong><p>학생 인증 후 Gemini 혜택을 확인할 수 있습니다. 대상·국가·약관은 Google 기준입니다.</p></div><a class="manager-offer-link" href="https://gemini.google/students/" target="_blank" rel="noopener noreferrer">혜택 확인 ↗</a></article>
-          <article class="manager-offer manager-offer-zed"><span class="manager-offer-mark" aria-hidden="true">Z</span><div class="manager-offer-copy"><strong>Zed Education · Pro 1년 무료</strong><p>인증된 대학생에게 Pro 기능과 매월 $10 AI 크레딧을 제공합니다. 자격·약관은 Zed 기준입니다.</p></div><a class="manager-offer-link" href="https://zed.dev/education" target="_blank" rel="noopener noreferrer">신청하기 ↗</a></article>
-          <article class="manager-offer manager-offer-typesafe"><span class="manager-offer-mark" aria-hidden="true">T</span><div class="manager-offer-copy"><strong>TypeSafe AI 개발 콘솔</strong><p>AI 개발과 실험을 위한 TypeSafe 콘솔을 확인해보세요.</p></div><a class="manager-offer-link" href="https://console.typesafe.ai/" target="_blank" rel="noopener noreferrer">콘솔 열기 ↗</a></article>
-        </section>
+        <section id="managerOffers" class="manager-offers" aria-label="학생 혜택" hidden></section>
         <section id="dataPanel" class="data-panel" hidden>
           <div class="toolbar">
             <label class="search"><span class="sr-only">검색</span><input id="searchInput" type="search" placeholder="이름, 학번, 반, 조, 지도교수로 검색"></label>
@@ -150,10 +148,7 @@
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalModelTitle"></h2><p id="portalModelNote"></p></div></header><label class="portal-model-search"><span id="portalModelSearchLabel"></span><input id="portalModelSearch" type="search" autocomplete="off"></label><p id="portalModelSelected" class="portal-model-selected"></p><div class="portal-model-browser"><aside id="portalModelProviders" class="portal-provider-list" aria-label="프로바이더 목록"></aside><div id="portalAllowedModels" class="portal-model-list"></div></div></section>
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalPersonalTitle"></h2><p id="portalPersonalNote"></p></div></header><div id="portalPersonalKeys" class="portal-key-list"></div></section>
           <section class="portal-key-section"><header class="portal-section-head"><div><h2 id="portalTeamTitle"></h2><p id="portalTeamNote"></p></div></header><div id="portalTeamKeys" class="portal-key-list"></div></section>
-          <section id="portalStudentOffers" class="portal-student-offers" aria-label="학생 혜택">
-            <aside class="portal-offer portal-offer-gemini"><span class="portal-offer-mark" aria-hidden="true">G</span><div class="portal-offer-copy"><strong id="portalGeminiTitle"></strong><p id="portalGeminiDescription"></p></div><a id="portalGeminiLink" class="portal-offer-link" href="https://gemini.google/students/" target="_blank" rel="noopener noreferrer"></a></aside>
-            <aside class="portal-offer portal-offer-zed"><span class="portal-offer-mark" aria-hidden="true">Z</span><div class="portal-offer-copy"><strong id="portalZedTitle"></strong><p id="portalZedDescription"></p></div><a id="portalZedLink" class="portal-offer-link" href="https://zed.dev/education" target="_blank" rel="noopener noreferrer"></a></aside>
-          </section>
+          <section id="portalStudentOffers" class="portal-student-offers" aria-label="학생 혜택" hidden></section>
           <footer class="portal-footer"><button id="portalBackButton" class="button ghost" type="button" hidden>관리 화면</button><button id="portalLogoutButton" class="button ghost"></button></footer>
         </div>
       </main>
@@ -251,6 +246,23 @@
         <footer><button class="button ghost" type="button" data-close="accountEditDialog">취소</button><button class="button primary" type="submit">저장</button></footer>
       </form>
     </dialog>
+    <dialog id="promotionDialog" class="dialog">
+      <form id="promotionForm" class="dialog-card">
+        <header><h2 id="promotionDialogTitle">프로모션 배너 등록</h2><button class="close" type="button" data-close="promotionDialog" aria-label="닫기">×</button></header>
+        <input id="promotionId" type="hidden">
+        <div class="form-grid">
+          <label>한국어 제목<input id="promotionTitleKo" maxlength="100" required></label>
+          <label>영어 제목<input id="promotionTitleEn" maxlength="100" required></label>
+          <label>한국어 링크 문구<input id="promotionLinkLabelKo" maxlength="80" required></label>
+          <label>영어 링크 문구<input id="promotionLinkLabelEn" maxlength="80" required></label>
+        </div>
+        <label>링크 URL<input id="promotionLinkUrl" type="url" inputmode="url" maxlength="500" placeholder="https://example.com" required></label>
+        <label>한국어 설명<textarea id="promotionDescriptionKo" rows="3" maxlength="500" required></textarea></label>
+        <label>영어 설명<textarea id="promotionDescriptionEn" rows="3" maxlength="500" required></textarea></label>
+        <p id="promotionFormError" class="form-error" role="alert"></p>
+        <footer><button class="button ghost" type="button" data-close="promotionDialog">취소</button><button class="button primary" type="submit">저장</button></footer>
+      </form>
+    </dialog>
     <dialog id="credentialDialog" class="dialog">
       <form id="credentialForm" class="dialog-card">
         <header><h2>OpenRouter 키 발급</h2><button class="close" type="button" data-close="credentialDialog" aria-label="닫기">×</button></header>
@@ -312,6 +324,6 @@
         <footer><button class="button ghost" type="button" data-close="auditDialog">닫기</button></footer>
       </section>
     </dialog>
-    <script src="/app.js?v=2026-09-22.20" defer></script>
+    <script src="/app.js?v=2026-09-23.1" defer></script>
   </body>
 </html>

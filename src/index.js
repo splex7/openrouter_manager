@@ -1,9 +1,9 @@
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const PASSWORD_ITERATIONS = 100_000;
 const DEFAULT_INITIAL_PASSWORD = "wosmdeogkrry1!";
-const ASSET_VERSION = "2026-09-22.20";
+const ASSET_VERSION = "2026-09-23.1";
 const STATIC_ASSET_PATHS = new Set(["/app.js", "/styles.css", "/logo.css", "/jeiu_logo.svg"]);
-const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/my-keys"]);
+const APP_PATHS = new Set(["/dashboard", "/students", "/teams", "/keys", "/models", "/access", "/audits", "/accounts", "/promotions", "/my-keys"]);
 
 function json(data, status = 200, headers = {}) {
   return Response.json(data, {
@@ -99,6 +99,41 @@ function optionalText(value, label, maxLength = 1000) {
   const text = String(value ?? "").trim();
   if (text.length > maxLength) throw new Error(`${label}은(는) ${maxLength}자 이하여야 합니다.`);
   return text;
+}
+
+function promotionLink(value) {
+  const link = requiredText(value, "링크 주소", 500);
+  let url;
+  try { url = new URL(link); } catch { throw new Error("링크 주소가 올바르지 않습니다."); }
+  if (url.protocol !== "https:") throw new Error("링크 주소는 https여야 합니다.");
+  return url.toString();
+}
+
+function promotionInput(body) {
+  return {
+    titleKo: requiredText(body?.titleKo, "한국어 제목", 100),
+    descriptionKo: requiredText(body?.descriptionKo, "한국어 설명", 500),
+    linkLabelKo: requiredText(body?.linkLabelKo, "한국어 링크 문구", 80),
+    titleEn: requiredText(body?.titleEn, "영어 제목", 100),
+    descriptionEn: requiredText(body?.descriptionEn, "영어 설명", 500),
+    linkLabelEn: requiredText(body?.linkLabelEn, "영어 링크 문구", 80),
+    linkUrl: promotionLink(body?.linkUrl),
+  };
+}
+
+function promotionRecord(row) {
+  return {
+    id: row.id,
+    titleKo: row.title_ko,
+    descriptionKo: row.description_ko,
+    linkLabelKo: row.link_label_ko,
+    titleEn: row.title_en,
+    descriptionEn: row.description_en,
+    linkLabelEn: row.link_label_en,
+    linkUrl: row.link_url,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function integerId(value, label) {
@@ -1162,6 +1197,69 @@ export default {
           after: { allowAdminCredentialManagement: body.allowAdminCredentialManagement },
         });
         return json({ data: { allowAdminCredentialManagement: body.allowAdminCredentialManagement } });
+      }
+    }
+
+    if (url.pathname === "/api/promotions") {
+      const auth = await requireRole(request, env, ["student", "admin", "master"]);
+      if (auth.error) return auth.error;
+      if (request.method === "GET") {
+        const { results } = await env.DB.prepare("SELECT * FROM portal_promotions ORDER BY created_at, id").all();
+        return json({ data: results.map(promotionRecord) });
+      }
+      if (request.method === "POST") {
+        if (!["admin", "master"].includes(auth.account.role)) return json({ error: "프로모션 배너는 관리자 또는 Master만 관리할 수 있습니다." }, 403);
+        try {
+          const promotion = promotionInput(await readJson(request));
+          const id = crypto.randomUUID();
+          await env.DB.prepare(`
+            INSERT INTO portal_promotions (
+              id, title_ko, description_ko, link_label_ko,
+              title_en, description_en, link_label_en, link_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            id, promotion.titleKo, promotion.descriptionKo, promotion.linkLabelKo,
+            promotion.titleEn, promotion.descriptionEn, promotion.linkLabelEn, promotion.linkUrl,
+          ).run();
+          await audit(env, auth.account.id, "promotion.create", "promotion", null, { promotionId: id, after: promotion });
+          return json({ data: { id, ...promotion } }, 201);
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : "프로모션 배너를 등록하지 못했습니다." }, 400);
+        }
+      }
+    }
+
+    const promotionMatch = url.pathname.match(/^\/api\/promotions\/([\w-]+)$/);
+    if (promotionMatch) {
+      const auth = await requireRole(request, env, ["admin", "master"]);
+      if (auth.error) return auth.error;
+      const promotionId = promotionMatch[1];
+      try {
+        const existing = await env.DB.prepare("SELECT * FROM portal_promotions WHERE id = ?").bind(promotionId).first();
+        if (!existing) return json({ error: "프로모션 배너를 찾을 수 없습니다." }, 404);
+        if (request.method === "PATCH") {
+          const promotion = promotionInput(await readJson(request));
+          await env.DB.prepare(`
+            UPDATE portal_promotions
+            SET title_ko = ?, description_ko = ?, link_label_ko = ?,
+                title_en = ?, description_en = ?, link_label_en = ?, link_url = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(
+            promotion.titleKo, promotion.descriptionKo, promotion.linkLabelKo,
+            promotion.titleEn, promotion.descriptionEn, promotion.linkLabelEn, promotion.linkUrl,
+            promotionId,
+          ).run();
+          await audit(env, auth.account.id, "promotion.update", "promotion", null, { promotionId, before: promotionRecord(existing), after: promotion });
+          return json({ data: { id: promotionId, ...promotion } });
+        }
+        if (request.method === "DELETE") {
+          await env.DB.prepare("DELETE FROM portal_promotions WHERE id = ?").bind(promotionId).run();
+          await audit(env, auth.account.id, "promotion.delete", "promotion", null, { promotionId, before: promotionRecord(existing) });
+          return json({ data: { deleted: true } });
+        }
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : "프로모션 배너를 변경하지 못했습니다." }, 400);
       }
     }
 

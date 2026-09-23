@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
-const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, analytics: null, analyticsPeriod: "month", teamMetric: "costUsd", dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, limitCredential: null, portalCredentials: [], portalQuota: null, portalAnalytics: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, revealedKeyRevoked: false, revealedCredentialId: null, keyLimitSync: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", selectedCredentialIds: new Set(), hardDeleteStudent: null };
-const VIEW_PATHS = Object.freeze({ dashboard: "/dashboard", students: "/students", teams: "/teams", credentials: "/keys", modelPolicy: "/models", accessPolicy: "/access", audits: "/audits", accounts: "/accounts", personalKeys: "/my-keys" });
+const state = { me: null, students: [], teams: [], credentials: [], dashboard: null, analytics: null, analyticsPeriod: "month", teamMetric: "costUsd", dataLoaded: false, accounts: [], audits: [], auditOffset: 0, view: "dashboard", activeStudent: null, activeStudentQuota: null, activeTeam: null, limitCredential: null, promotions: [], portalCredentials: [], portalQuota: null, portalAnalytics: null, modelPolicy: null, availableModels: [], modelPricing: {}, portalModelProvider: "", portalModelSearch: "", selectedPortalModel: "", accessPolicy: null, portalRevealSubjectType: null, revealedKeyRevoked: false, revealedCredentialId: null, keyLimitSync: null, portalLanguage: localStorage.getItem("student-portal-language") === "en" ? "en" : "ko", selectedCredentialIds: new Set(), hardDeleteStudent: null };
+const VIEW_PATHS = Object.freeze({ dashboard: "/dashboard", students: "/students", teams: "/teams", credentials: "/keys", modelPolicy: "/models", accessPolicy: "/access", promotions: "/promotions", audits: "/audits", accounts: "/accounts", personalKeys: "/my-keys" });
 const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '"': "&quot;" }[c]));
 const MODEL_PROVIDERS = Object.freeze({
   "openai": ["OpenAI", "openai.com", "https://openrouter.ai/images/icons/OpenAI.svg"], "anthropic": ["Anthropic", "anthropic.com", "https://openrouter.ai/images/icons/Anthropic.svg"], "google": ["Google", "google.com"], "meta-llama": ["Meta", "meta.com"], "mistralai": ["Mistral AI", "mistral.ai"], "qwen": ["Qwen", "qwen.ai", "https://openrouter.ai/images/icons/Qwen.png"], "deepseek": ["DeepSeek", "deepseek.com"], "z-ai": ["Z.ai", "z.ai"], "zai": ["Z.ai", "z.ai"], "nex-agi": ["Nex AGI", "nex-agi.com", "https://nex-agi.com/favicon.svg"], "x-ai": ["xAI", "x.ai"], "cohere": ["Cohere", "cohere.com"], "perplexity": ["Perplexity", "perplexity.ai"], "moonshotai": ["Moonshot AI", "moonshot.cn"], "minimax": ["MiniMax", "minimaxi.com"], "nvidia": ["NVIDIA", "nvidia.com"], "microsoft": ["Microsoft", "microsoft.com"], "amazon": ["Amazon", "aws.amazon.com"], "ibm": ["IBM", "ibm.com"], "ibm-granite": ["IBM Granite", "ibm.com"], "groq": ["Groq", "groq.com"], "togethercomputer": ["Together AI", "together.ai"], "together": ["Together AI", "together.ai"], "fireworks-ai": ["Fireworks AI", "fireworks.ai"], "replicate": ["Replicate", "replicate.com"], "huggingface": ["Hugging Face", "huggingface.co"], "liquid": ["Liquid AI", "liquid.ai"], "arcee-ai": ["Arcee AI", "arcee.ai"], "allenai": ["Ai2", "allenai.org"], "nousresearch": ["Nous Research", "nousresearch.com"], "fish-audio": ["Fish Audio", "fish.audio", "https://fish.audio/favicon.ico"], "poolside": ["Poolside", "poolside.ai", "https://openrouter.ai/images/icons/poolside-logomark-solid-color.svg"], "thinkingmachines": ["Thinking Machines", "thinkingmachines.ai", "https://thinkingmachines.ai/images/favicon-32x32.png"]
@@ -155,6 +155,29 @@ function renderPortalAnalytics() {
   $("#portalAnalyticsHeatmapLow").textContent = portalText("적음", "Less"); $("#portalAnalyticsHeatmapHigh").textContent = portalText("많음", "More");
   renderUsageHeatmap("#portalAnalyticsHeatmap", analytics);
 }
+function promotionText(promotion, field) { return portalText(promotion[`${field}Ko`], promotion[`${field}En`]); }
+function promotionCard(promotion, surface) {
+  const className = surface === "manager" ? "manager-offer" : "portal-offer";
+  const markClass = surface === "manager" ? "manager-offer-mark" : "portal-offer-mark";
+  const copyClass = surface === "manager" ? "manager-offer-copy" : "portal-offer-copy";
+  const linkClass = surface === "manager" ? "manager-offer-link" : "portal-offer-link";
+  const mark = String(promotion.titleKo || promotion.titleEn || "+").trim().slice(0, 1).toUpperCase() || "+";
+  const title = surface === "manager" ? promotion.titleKo : promotionText(promotion, "title");
+  const description = surface === "manager" ? promotion.descriptionKo : promotionText(promotion, "description");
+  const linkLabel = surface === "manager" ? promotion.linkLabelKo : promotionText(promotion, "linkLabel");
+  return `<article class="${className} promotion-card"><span class="${markClass}" aria-hidden="true">${esc(mark)}</span><div class="${copyClass}"><strong>${esc(title)}</strong><p>${esc(description)}</p></div><a class="${linkClass}" href="${esc(promotion.linkUrl)}" target="_blank" rel="noopener noreferrer">${esc(linkLabel)}</a></article>`;
+}
+function renderPortalPromotions(isStudent) {
+  const offers = $("#portalStudentOffers");
+  offers.hidden = !isStudent || !state.promotions.length;
+  offers.setAttribute("aria-label", portalText("학생 혜택", "Student offers"));
+  offers.innerHTML = state.promotions.map((promotion) => promotionCard(promotion, "portal")).join("");
+}
+function renderManagerPromotions() {
+  const offers = $("#managerOffers");
+  offers.hidden = state.view !== "dashboard" || !state.promotions.length;
+  offers.innerHTML = state.promotions.map((promotion) => promotionCard(promotion, "manager")).join("");
+}
 function renderStudentPortal() {
   const isStudent = state.me?.role === "student";
   const name = state.me?.student?.name || state.me?.loginId || "";
@@ -193,14 +216,7 @@ function renderStudentPortal() {
   $("#portalModelSearch").value = state.portalModelSearch;
   renderPortalProviderList();
   renderPortalModelList();
-  $("#portalGeminiTitle").textContent = portalText("Google Gemini 학생 1년 무료", "Google Gemini: one year free for students");
-  $("#portalGeminiDescription").textContent = portalText("학생 인증 후 Gemini 혜택을 확인하세요. 대상·국가·약관은 Google 기준입니다.", "Verify your student status to check Gemini benefits. Eligibility, availability and terms are set by Google.");
-  $("#portalGeminiLink").textContent = portalText("Gemini 혜택 확인 ↗", "View Gemini offer ↗");
-  $("#portalZedTitle").textContent = portalText("Zed Education · Pro 1년 무료", "Zed Education: Pro free for one year");
-  $("#portalZedDescription").textContent = portalText("인증된 대학생에게 Pro 기능과 매월 $10 AI 크레딧을 제공합니다. 자격·약관은 Zed 기준입니다.", "Verified university students receive Pro features and $10/month in AI credits. Eligibility and terms are set by Zed.");
-  $("#portalZedLink").textContent = portalText("Zed Education 신청 ↗", "Apply for Zed Education ↗");
-  $("#portalStudentOffers").hidden = !isStudent;
-  $("#portalStudentOffers").setAttribute("aria-label", portalText("학생 혜택", "Student offers"));
+  renderPortalPromotions(isStudent);
   $("#portalBackButton").hidden = isStudent;
 }
 
@@ -241,27 +257,29 @@ async function loadDashboardAnalytics() {
   renderAnalytics();
   renderTeamAnalytics();
 }
-async function loadDashboard() { const [response, analytics] = await Promise.all([api("/api/dashboard"), api(`/api/analytics/dashboard?period=${state.analyticsPeriod}`).catch(() => ({ data: null }))]); state.dashboard = response.data; state.analytics = analytics.data; render(); }
+async function loadDashboard() { const [response, analytics, promotions] = await Promise.all([api("/api/dashboard"), api(`/api/analytics/dashboard?period=${state.analyticsPeriod}`).catch(() => ({ data: null })), api("/api/promotions")]); state.dashboard = response.data; state.analytics = analytics.data; state.promotions = promotions.data; render(); }
 async function ensureData() { if (state.dataLoaded) { render(); return; } await loadData(); }
 async function loadAccounts() { const response = await api("/api/accounts"); state.accounts = response.data; render(); }
 async function loadAudits(reset = true) { const offset = reset ? 0 : state.auditOffset; const response = await api(`/api/audit-events?offset=${offset}`); state.audits = reset ? response.data : [...state.audits, ...response.data]; state.auditOffset = response.nextOffset; state.auditHasMore = response.hasMore; render(); }
 async function loadModelPolicy() { const response = await api("/api/model-policy"); state.modelPolicy = response.data; render(); }
 async function loadAccessPolicy() { const response = await api("/api/access-policy"); state.accessPolicy = response.data; render(); }
+async function loadPromotions() { const response = await api("/api/promotions"); state.promotions = response.data; render(); }
 function viewFromPath() { return Object.entries(VIEW_PATHS).find(([, path]) => path === window.location.pathname)?.[0] || "dashboard"; }
 function setViewPath(view, replace = false) { const path = VIEW_PATHS[view] || VIEW_PATHS.dashboard; if (window.location.pathname !== path) history[replace ? "replaceState" : "pushState"]({}, "", path); }
 async function navigateView(view, { replace = false, updateUrl = true } = {}) {
   if (view === "personalKeys" && state.me?.role === "master") view = "dashboard";
+  if (view === "promotions" && !["admin", "master"].includes(state.me?.role)) view = "dashboard";
   if (!VIEW_PATHS[view]) view = "dashboard";
   if (updateUrl) setViewPath(view, replace);
   if (view === "personalKeys") { state.view = view; document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("selected", button.dataset.view === view)); await openPersonalPortal(); return; }
   $("#studentPortal").hidden = true; $("#managerApp").hidden = false; state.view = view; $("#searchInput").value = "";
-  if (view === "dashboard") await loadDashboard(); else if (view === "audits") await loadAudits(); else if (view === "accounts") await loadAccounts(); else if (view === "modelPolicy") await loadModelPolicy(); else if (view === "accessPolicy") await loadAccessPolicy(); else await ensureData();
+  if (view === "dashboard") await loadDashboard(); else if (view === "audits") await loadAudits(); else if (view === "accounts") await loadAccounts(); else if (view === "modelPolicy") await loadModelPolicy(); else if (view === "accessPolicy") await loadAccessPolicy(); else if (view === "promotions") await loadPromotions(); else await ensureData();
 }
 function renderFilters() {
   const filter = $("#classFilter");
-  $("#searchInput").placeholder = state.view === "modelPolicy" ? "모델 슬러그 검색" : "이름, 학번, 반, 조, 지도교수로 검색";
-  $("#auditActionFilter").hidden = state.view !== "audits"; filter.hidden = ["dashboard", "audits", "accounts", "modelPolicy", "accessPolicy"].includes(state.view);
-  if (["dashboard", "audits", "accounts", "modelPolicy", "accessPolicy"].includes(state.view)) return;
+  $("#searchInput").placeholder = state.view === "modelPolicy" ? "모델 슬러그 검색" : state.view === "promotions" ? "제목, 설명 또는 링크로 검색" : "이름, 학번, 반, 조, 지도교수로 검색";
+  $("#auditActionFilter").hidden = state.view !== "audits"; filter.hidden = ["dashboard", "audits", "accounts", "modelPolicy", "accessPolicy", "promotions"].includes(state.view);
+  if (["dashboard", "audits", "accounts", "modelPolicy", "accessPolicy", "promotions"].includes(state.view)) return;
   const before = filter.value;
   const classes = [...new Set(activeStudents().map((student) => student.class_name))].sort();
   filter.innerHTML = `<option value="">전체 반</option>${classes.map((v) => `<option value="${esc(v)}">${esc(v)}반</option>`).join("")}`;
@@ -366,7 +384,7 @@ function renderAccounts() {
   $("#tableBody").innerHTML = rows.length ? rows.map((account) => `<tr><td><strong>${esc(account.ownerName)}</strong>${account.studentNumber ? `<small>개인 소유자 연결 · ${esc(account.studentNumber)}</small>` : "<small>개인 소유자 미연결</small>"}</td><td><code>${esc(account.loginId)}</code></td><td>${esc(accountRoleLabel(account.role))}</td><td><small>${esc(account.memo || "—")}</small></td><td><span class="status ${account.isActive ? "active" : "inactive"}">${account.isActive ? "활성" : "비활성"}</span><small>${account.mustChangePassword ? "초기 비밀번호 변경 필요" : "비밀번호 변경 완료"}</small></td><td><small>${account.lastLoginAt ? auditTime(account.lastLoginAt) : "로그인 기록 없음"}</small></td><td class="actions">${canManageAccounts ? `<button class="table-button" data-edit-account="${account.id}">수정</button>${account.role !== "master" ? ` <button class="table-button" data-reset-account="${account.id}">비밀번호 초기화</button> <button class="table-button ${account.isActive ? "danger" : ""}" data-toggle-account="${account.id}">${account.isActive ? "비활성화" : "활성화"}</button>` : ""}` : account.role !== "master" ? `<button class="table-button" data-reset-account="${account.id}">비밀번호 초기화</button>` : "—"}</td></tr>`).join("") : "<tr><td class=\"empty\" colspan=\"7\">등록된 계정이 없습니다.</td></tr>";
 }
 function auditLabel(action) {
-  const labels = { "account.bootstrap": "Master 계정 생성", "account.create": "계정 생성", "account.create_auto": "학생 계정 자동 생성", "account.create_bulk": "학생 계정 일괄 생성", "account.update": "계정 정보 수정", "account.password_reset": "초기 비밀번호 재설정", "account.status_update": "계정 상태 변경", "access_policy.update": "관리자 키 권한 변경", "auth.login": "로그인", "auth.login_failed": "로그인 실패", "auth.logout": "로그아웃", "auth.password_change": "비밀번호 변경", "student.create": "학생 생성", "student.update": "학생 수정", "student.deactivate": "학생 비활성화", "student.hard_delete": "학생 완전 삭제", "team.create": "조 생성", "team.update": "조 수정", "team.deactivate": "조 비활성화", "team_member.assign": "조원 배정", "team_member.remove": "조원 해제", "quota.update": "개인 한도 정책 변경", "model_policy.update": "허용 모델 정책 변경", "analytics.sync": "사용량 동기화", "credential.issue": "키 발급", "credential.issue_bulk": "키 일괄 발급", "credential.reissue": "키 재발급", "credential.limit_check": "OpenRouter 키 한도 확인", "credential.limit_sync": "OpenRouter 키 한도 동기화", "credential.limit_increase": "키 한도 상향", "credential.personal_limit_restore": "개인 키 기간 한도 자동 복원", "credential.reveal": "키 조회", "credential.test": "키 연결 테스트", "credential.revoke": "키 폐기", "credential.revoke_bulk": "키 일괄 폐기", "credential.normalize_personal_labels": "기존 개인 키 이름 정리" };
+  const labels = { "account.bootstrap": "Master 계정 생성", "account.create": "계정 생성", "account.create_auto": "학생 계정 자동 생성", "account.create_bulk": "학생 계정 일괄 생성", "account.update": "계정 정보 수정", "account.password_reset": "초기 비밀번호 재설정", "account.status_update": "계정 상태 변경", "access_policy.update": "관리자 키 권한 변경", "auth.login": "로그인", "auth.login_failed": "로그인 실패", "auth.logout": "로그아웃", "auth.password_change": "비밀번호 변경", "student.create": "학생 생성", "student.update": "학생 수정", "student.deactivate": "학생 비활성화", "student.hard_delete": "학생 완전 삭제", "team.create": "조 생성", "team.update": "조 수정", "team.deactivate": "조 비활성화", "team_member.assign": "조원 배정", "team_member.remove": "조원 해제", "promotion.create": "프로모션 배너 등록", "promotion.update": "프로모션 배너 수정", "promotion.delete": "프로모션 배너 삭제", "quota.update": "개인 한도 정책 변경", "model_policy.update": "허용 모델 정책 변경", "analytics.sync": "사용량 동기화", "credential.issue": "키 발급", "credential.issue_bulk": "키 일괄 발급", "credential.reissue": "키 재발급", "credential.limit_check": "OpenRouter 키 한도 확인", "credential.limit_sync": "OpenRouter 키 한도 동기화", "credential.limit_increase": "키 한도 상향", "credential.personal_limit_restore": "개인 키 기간 한도 자동 복원", "credential.reveal": "키 조회", "credential.test": "키 연결 테스트", "credential.revoke": "키 폐기", "credential.revoke_bulk": "키 일괄 폐기", "credential.normalize_personal_labels": "기존 개인 키 이름 정리" };
   return labels[action] || action;
 }
 function auditTime(value) { return kstTime(value, true); }
@@ -393,21 +411,28 @@ function renderAccessPolicy() {
   $("#tableHead").innerHTML = "<tr><th>권한</th><th>현재 상태</th><th></th></tr>";
   $("#tableBody").innerHTML = `<tr><td><strong>관리자 전체 키 관리</strong><small>키 목록 조회, 계정 소유자에서의 발급, 한도 상향, 폐기 및 키 원문 조회</small></td><td><span class="status ${allowed ? "active" : "inactive"}">${allowed ? "허용" : "차단"}</span></td><td class="actions"><button id="saveAccessPolicyButton" class="table-button ${allowed ? "danger" : ""}" type="button">${allowed ? "관리자 권한 차단" : "관리자 권한 허용"}</button></td></tr>`;
 }
+function renderPromotions() {
+  $("#tableHead").innerHTML = "<tr><th>배너</th><th>링크</th><th>마지막 수정</th><th></th></tr>";
+  const q = query();
+  const rows = state.promotions.filter((promotion) => !q || [promotion.titleKo, promotion.titleEn, promotion.descriptionKo, promotion.descriptionEn, promotion.linkUrl].join(" ").toLowerCase().includes(q));
+  $("#tableBody").innerHTML = rows.length ? rows.map((promotion) => `<tr><td><strong>${esc(promotion.titleKo)}</strong><small>${esc(promotion.titleEn)}</small></td><td><a href="${esc(promotion.linkUrl)}" target="_blank" rel="noopener noreferrer">${esc(promotion.linkLabelKo)} ↗</a><small>${esc(promotion.linkLabelEn)}</small></td><td><small>${kstTime(promotion.updatedAt || promotion.createdAt)}</small></td><td class="actions"><button class="table-button" data-edit-promotion="${promotion.id}">수정</button> <button class="table-button danger" data-delete-promotion="${promotion.id}">삭제</button></td></tr>`).join("") : "<tr><td class=\"empty\" colspan=\"4\">등록된 프로모션 배너가 없습니다.</td></tr>";
+}
 function renderNavigation() {
-  document.querySelector('[data-view="credentials"]').hidden = !state.me?.canViewCredentials; $("#accountsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#auditsNav").hidden = state.me?.role !== "master"; $("#modelPolicyNav").hidden = state.me?.role !== "master"; $("#accessPolicyNav").hidden = true;
+  document.querySelector('[data-view="credentials"]').hidden = !state.me?.canViewCredentials; $("#accountsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#promotionsNav").hidden = !["admin", "master"].includes(state.me?.role); $("#auditsNav").hidden = state.me?.role !== "master"; $("#modelPolicyNav").hidden = state.me?.role !== "master"; $("#accessPolicyNav").hidden = true;
   $("#personalKeysNav").hidden = state.me?.role === "master";
 }
 function render() {
   renderFilters(); renderSummary(); renderAnalytics(); renderTeamAnalytics();
-  const views = { dashboard: ["대시보드", "수업 운영의 기본 현황을 빠르게 확인합니다.", ""], students: ["계정 소유자", "학생과 관리자의 개인 키·한도 및 수강생 조 편성을 관리합니다.", "학생 추가"], teams: ["조 편성", "조를 만들고 조원을 배정하거나 이동할 수 있습니다.", "조 추가"], credentials: ["키 관리", "개인·조 키를 조회하고 한도를 상향하거나 폐기합니다.", ""], modelPolicy: ["허용 모델", "OpenRouter 워크스페이스 기본 Guardrail에 적용됩니다.", "허용 모델 수정"], accessPolicy: ["권한 설정", "관리자의 전체 키 관리 권한을 제어합니다.", ""], audits: ["감사 로그", "이벤트는 UTC 기준으로 기록하고 화면에는 KST로 표시합니다.", ""], accounts: ["계정 관리", "Master는 계정을 관리하고, 관리자는 Master를 제외한 계정의 비밀번호를 초기화할 수 있습니다.", "계정 추가"] };
+  const views = { dashboard: ["대시보드", "수업 운영의 기본 현황을 빠르게 확인합니다.", ""], students: ["계정 소유자", "학생과 관리자의 개인 키·한도 및 수강생 조 편성을 관리합니다.", "학생 추가"], teams: ["조 편성", "조를 만들고 조원을 배정하거나 이동할 수 있습니다.", "조 추가"], credentials: ["키 관리", "개인·조 키를 조회하고 한도를 상향하거나 폐기합니다.", ""], modelPolicy: ["허용 모델", "OpenRouter 워크스페이스 기본 Guardrail에 적용됩니다.", "허용 모델 수정"], accessPolicy: ["권한 설정", "관리자의 전체 키 관리 권한을 제어합니다.", ""], promotions: ["프로모션 배너", "학생 포털 하단과 관리자 대시보드에 노출할 혜택 배너를 관리합니다.", "배너 추가"], audits: ["감사 로그", "이벤트는 UTC 기준으로 기록하고 화면에는 KST로 표시합니다.", ""], accounts: ["계정 관리", "Master는 계정을 관리하고, 관리자는 Master를 제외한 계정의 비밀번호를 초기화할 수 있습니다.", "계정 추가"] };
   const copy = views[state.view]; $("#pageTitle").textContent = copy[0]; $("#pageDescription").textContent = state.view === "modelPolicy" && state.modelPolicy?.restrictionMode === "blocklist" ? "OpenRouter의 차단 목록이 적용 중입니다. 차단 목록은 OpenRouter에서 관리합니다." : state.view === "modelPolicy" && state.modelPolicy?.assignmentRequired ? "워크스페이스 기본 Guardrail이 없어 ClassKeys의 기존·새 키에 직접 적용됩니다." : copy[1]; $("#primaryAction").textContent = copy[2];
   const canManage = Boolean(state.me?.canManageCredentials);
   const canManageAccounts = state.me?.role === "master";
-  $("#primaryAction").hidden = ["dashboard", "audits", "accessPolicy", "credentials"].includes(state.view) || (state.view === "accounts" && !canManageAccounts) || (state.view === "modelPolicy" && state.modelPolicy?.restrictionMode === "blocklist"); $("#summary").hidden = state.view !== "dashboard"; $("#analyticsPanel").hidden = state.view !== "dashboard"; $("#managerOffers").hidden = state.view !== "dashboard"; $("#dataPanel").hidden = state.view === "dashboard"; $("#dataPanel").classList.toggle("owner-table-view", state.view === "students"); if (state.view !== "audits") $("#auditMoreButton").hidden = true;
+  $("#primaryAction").hidden = ["dashboard", "audits", "accessPolicy", "credentials"].includes(state.view) || (state.view === "accounts" && !canManageAccounts) || (state.view === "modelPolicy" && state.modelPolicy?.restrictionMode === "blocklist"); $("#summary").hidden = state.view !== "dashboard"; $("#analyticsPanel").hidden = state.view !== "dashboard"; $("#dataPanel").hidden = state.view === "dashboard"; $("#dataPanel").classList.toggle("owner-table-view", state.view === "students"); if (state.view !== "audits") $("#auditMoreButton").hidden = true;
   $("#bulkRevokeButton").hidden = state.view !== "credentials" || !canManage; $("#hideRevokedFilter").hidden = state.view !== "credentials";
   renderNavigation();
   document.querySelectorAll("[data-view]").forEach((button) => button.classList.toggle("selected", button.dataset.view === state.view));
-  if (state.view === "students") renderStudents(); else if (state.view === "teams") renderTeams(); else if (state.view === "credentials") renderCredentials(); else if (state.view === "modelPolicy") renderModelPolicy(); else if (state.view === "accessPolicy") renderAccessPolicy(); else if (state.view === "accounts") renderAccounts(); else if (state.view === "audits") renderAudits();
+  renderManagerPromotions();
+  if (state.view === "students") renderStudents(); else if (state.view === "teams") renderTeams(); else if (state.view === "credentials") renderCredentials(); else if (state.view === "modelPolicy") renderModelPolicy(); else if (state.view === "accessPolicy") renderAccessPolicy(); else if (state.view === "promotions") renderPromotions(); else if (state.view === "accounts") renderAccounts(); else if (state.view === "audits") renderAudits();
 }
 function teamOptions(student = null) { const teams = state.teams.filter((team) => team.is_active && (!student || (team.class_name === student.class_name && team.advisor_name === student.advisor_name))); return `<option value="">미편성</option>${teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}`; }
 function openStudent(student = null) {
@@ -417,6 +442,16 @@ async function openAccount() {
   $("#accountForm").reset(); $("#accountRole").value = "admin"; error("#accountFormError"); dialog("accountDialog");
 }
 function openAccountEdit(account) { $("#accountEditId").value = account.id; $("#accountEditDisplayName").value = account.ownerName || ""; $("#accountEditMemo").value = account.memo || ""; error("#accountEditError"); dialog("accountEditDialog"); }
+function openPromotion(promotion = null) {
+  $("#promotionForm").reset();
+  $("#promotionDialogTitle").textContent = promotion ? "프로모션 배너 수정" : "프로모션 배너 등록";
+  $("#promotionId").value = promotion?.id || "";
+  $("#promotionTitleKo").value = promotion?.titleKo || ""; $("#promotionTitleEn").value = promotion?.titleEn || "";
+  $("#promotionDescriptionKo").value = promotion?.descriptionKo || ""; $("#promotionDescriptionEn").value = promotion?.descriptionEn || "";
+  $("#promotionLinkLabelKo").value = promotion?.linkLabelKo || ""; $("#promotionLinkLabelEn").value = promotion?.linkLabelEn || "";
+  $("#promotionLinkUrl").value = promotion?.linkUrl || "";
+  error("#promotionFormError"); dialog("promotionDialog");
+}
 function openModelPolicy() {
   $("#modelPolicyModels").value = (state.modelPolicy?.models || []).join("\n");
   error("#modelPolicyFormError"); dialog("modelPolicyDialog");
@@ -546,8 +581,8 @@ async function refreshOpenDetails() {
 }
 async function logout() { await api("/api/auth/logout", { method: "POST" }); window.location.replace("/"); }
 async function openPersonalPortal() {
-  const [{ data, personalQuota, modelPolicy, availableModels, modelPricing }, analytics] = await Promise.all([api("/api/credentials/mine"), api("/api/analytics/mine").catch(() => ({ data: null }))]);
-  state.portalCredentials = data; state.portalQuota = personalQuota; state.portalAnalytics = analytics.data; state.modelPolicy = modelPolicy; state.availableModels = availableModels || []; state.modelPricing = modelPricing || {};
+  const [{ data, personalQuota, modelPolicy, availableModels, modelPricing }, analytics, promotions] = await Promise.all([api("/api/credentials/mine"), api("/api/analytics/mine").catch(() => ({ data: null })), api("/api/promotions")]);
+  state.portalCredentials = data; state.portalQuota = personalQuota; state.portalAnalytics = analytics.data; state.promotions = promotions.data; state.modelPolicy = modelPolicy; state.availableModels = availableModels || []; state.modelPricing = modelPricing || {};
   $("#managerApp").hidden = true; renderStudentPortal(); $("#studentPortal").hidden = false;
 }
 async function initialize() {
@@ -567,6 +602,7 @@ $("#setupForm").addEventListener("submit", async (event) => { event.preventDefau
 $("#passwordForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#passwordFormError"); if ($("#newPassword").value !== $("#newPasswordConfirm").value) { error("#passwordFormError", "새 비밀번호가 일치하지 않습니다."); return; } try { await api("/api/auth/password", { method: "POST", body: JSON.stringify({ currentPassword: $("#currentPassword").value, newPassword: $("#newPassword").value }) }); close("passwordDialog"); await initialize(); notice("비밀번호를 변경했습니다."); } catch (e) { error("#passwordFormError", e.message); } });
 $("#accountForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#accountFormError"); try { await api("/api/accounts", { method: "POST", body: JSON.stringify({ role: $("#accountRole").value, displayName: $("#accountDisplayName").value.trim(), loginId: $("#accountLoginId").value.trim(), memo: $("#accountMemo").value.trim() }) }); close("accountDialog"); await Promise.all([loadAccounts(), loadData()]); notice("관리자 계정을 생성했습니다. 개인 키·한도 소유자로도 등록되었습니다. 첫 로그인 시 비밀번호 변경이 필요합니다."); } catch (e) { error("#accountFormError", e.message); } });
 $("#accountEditForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#accountEditError"); try { const id = $("#accountEditId").value; const data = await api(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ displayName: $("#accountEditDisplayName").value.trim(), memo: $("#accountEditMemo").value.trim() }) }); if (state.me?.id === id) { state.me.displayName = data.data.displayName; $("#accountName").textContent = data.data.displayName; } close("accountEditDialog"); await loadAccounts(); notice("계정 정보를 수정했습니다."); } catch (e) { error("#accountEditError", e.message); } });
+$("#promotionForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#promotionFormError"); const id = $("#promotionId").value; const body = { titleKo: $("#promotionTitleKo").value.trim(), titleEn: $("#promotionTitleEn").value.trim(), descriptionKo: $("#promotionDescriptionKo").value.trim(), descriptionEn: $("#promotionDescriptionEn").value.trim(), linkLabelKo: $("#promotionLinkLabelKo").value.trim(), linkLabelEn: $("#promotionLinkLabelEn").value.trim(), linkUrl: $("#promotionLinkUrl").value.trim() }; try { await api(id ? `/api/promotions/${id}` : "/api/promotions", { method: id ? "PATCH" : "POST", body: JSON.stringify(body) }); close("promotionDialog"); await loadPromotions(); notice(id ? "프로모션 배너를 수정했습니다." : "프로모션 배너를 등록했습니다."); } catch (e) { error("#promotionFormError", e.message); } });
 $("#studentForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#studentFormError"); const id = $("#studentId").value; const existing = state.students.find((s) => String(s.id) === id); const payload = { rosterNumber: Number($("#rosterNumber").value), studentNumber: $("#studentNumber").value.trim(), name: $("#studentName").value.trim(), className: $("#studentClass").value.trim(), advisorName: $("#studentAdvisor").value.trim(), isActive: $("#studentActive").value === "true" }; try { const response = id ? await api(`/api/students/${id}`, { method: "PATCH", body: JSON.stringify(payload) }) : await api("/api/students", { method: "POST", body: JSON.stringify(payload) }); const studentId = id || response.data.id; const teamId = $("#studentTeam").value; if (teamId && Number(teamId) !== Number(existing?.team_id)) await api(`/api/teams/${teamId}/members`, { method: "POST", body: JSON.stringify({ studentId }) }); if (!teamId && existing?.team_id) await api(`/api/teams/${existing.team_id}/members/${studentId}`, { method: "DELETE" }); close("studentDialog"); await loadData(); notice(id ? "학생 정보를 수정했습니다." : "학생을 추가했습니다."); } catch (e) { error("#studentFormError", e.message); } });
 $("#hardDeleteStudentButton").addEventListener("click", () => { const student = state.students.find((item) => String(item.id) === $("#studentId").value); if (!student) return; state.hardDeleteStudent = student; $("#hardDeleteStudentName").textContent = student.name; $("#hardDeleteConfirmName").value = ""; error("#hardDeleteStudentError"); dialog("hardDeleteStudentDialog"); });
 $("#hardDeleteStudentForm").addEventListener("submit", async (event) => { event.preventDefault(); const student = state.hardDeleteStudent; if (!student) return; error("#hardDeleteStudentError"); try { await api(`/api/students/${student.id}/hard-delete`, { method: "POST", body: JSON.stringify({ confirmName: $("#hardDeleteConfirmName").value }) }); close("hardDeleteStudentDialog"); close("studentDialog"); state.hardDeleteStudent = null; await loadData(); notice("학생을 완전 삭제했습니다."); } catch (e) { error("#hardDeleteStudentError", e.message); } });
@@ -585,7 +621,7 @@ $("#saveStudentQuotaButton").addEventListener("click", async () => {
 $("#credentialForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#credentialFormError"); try { const response = await api("/api/credentials", { method: "POST", body: JSON.stringify({ subjectType: $("#credentialSubjectType").value, subjectId: Number($("#credentialSubjectId").value), label: $("#credentialLabel").value.trim(), limitUsd: Number($("#credentialLimit").value), limitReset: $("#credentialReset").value }) }); close("credentialDialog"); await loadData(); await refreshOpenDetails(); await showKey(response.data.key, "발급된 키", null, false, response.data.id); } catch (e) { error("#credentialFormError", e.message); } });
 $("#credentialLimitForm").addEventListener("submit", async (event) => { event.preventDefault(); error("#credentialLimitError"); const credential = state.limitCredential; if (!credential) return; const nextLimit = Number($("#credentialLimitValue").value); if (!Number.isFinite(nextLimit) || nextLimit <= Number(credential.limitUsd || 0)) { error("#credentialLimitError", "현재 한도보다 큰 금액을 입력하세요."); return; } try { await api(`/api/credentials/${credential.id}/limit`, { method: "PATCH", body: JSON.stringify({ limitUsd: nextLimit }) }); close("credentialLimitDialog"); state.limitCredential = null; await loadData(); await refreshOpenDetails(); notice("조별 키 한도를 상향했습니다."); } catch (e) { error("#credentialLimitError", e.message); } });
 $("#assignStudentButton").addEventListener("click", async () => { const studentId = $("#assignStudent").value; if (!studentId || !state.activeTeam) return; try { await api(`/api/teams/${state.activeTeam.id}/members`, { method: "POST", body: JSON.stringify({ studentId: Number(studentId) }) }); await loadData(); await openTeam(state.activeTeam.id); notice("학생을 배정했습니다."); } catch (e) { notice(e.message); } });
-$("#primaryAction").addEventListener("click", async () => { if (state.view === "students") openStudent(); else if (state.view === "teams") dialog("teamDialog"); else if (state.view === "accounts") await openAccount(); else if (state.view === "modelPolicy") openModelPolicy(); });
+$("#primaryAction").addEventListener("click", async () => { if (state.view === "students") openStudent(); else if (state.view === "teams") dialog("teamDialog"); else if (state.view === "accounts") await openAccount(); else if (state.view === "modelPolicy") openModelPolicy(); else if (state.view === "promotions") openPromotion(); });
 $("#hideRevokedKeys").addEventListener("change", render);
 $("#bulkRevokeButton").addEventListener("click", async () => { const credentialIds = [...state.selectedCredentialIds]; if (!credentialIds.length || !confirm(`${credentialIds.length}개 키를 폐기할까요? 이 작업은 되돌릴 수 없습니다.`)) return; try { const { data } = await api("/api/credentials/revoke", { method: "POST", body: JSON.stringify({ credentialIds }) }); await loadData(); const revoked = data.filter((item) => item.status === "revoked").length; notice(`${revoked}개 키를 폐기했습니다.${data.length > revoked ? ` ${data.length - revoked}개는 건너뛰었습니다.` : ""}`); } catch (e) { notice(e.message); } });
 $("#auditMoreButton").addEventListener("click", () => loadAudits(false));
@@ -611,6 +647,8 @@ document.addEventListener("click", async (event) => {
   const team = event.target.closest("[data-manage-team]"); if (team) { await openTeam(team.dataset.manageTeam); return; }
   const detailIssue = event.target.closest("[data-detail-issue]"); if (detailIssue) { const subjectType = detailIssue.dataset.detailIssue; const subjectId = subjectType === "student" ? state.activeStudent?.id : state.activeStudent?.team_id; if (subjectId) openCredential(subjectType, subjectId); return; }
   const editAccount = event.target.closest("[data-edit-account]"); if (editAccount) { const account = state.accounts.find((item) => item.id === editAccount.dataset.editAccount); if (account) openAccountEdit(account); return; }
+  const editPromotion = event.target.closest("[data-edit-promotion]"); if (editPromotion) { const promotion = state.promotions.find((item) => item.id === editPromotion.dataset.editPromotion); if (promotion) openPromotion(promotion); return; }
+  const deletePromotion = event.target.closest("[data-delete-promotion]"); if (deletePromotion) { const promotion = state.promotions.find((item) => item.id === deletePromotion.dataset.deletePromotion); if (!promotion || !confirm(`“${promotion.titleKo}” 배너를 삭제할까요? 학생 화면과 대시보드에서 즉시 사라집니다.`)) return; try { await api(`/api/promotions/${promotion.id}`, { method: "DELETE" }); await loadPromotions(); notice("프로모션 배너를 삭제했습니다."); } catch (e) { notice(e.message); } return; }
   const resetAccount = event.target.closest("[data-reset-account]"); if (resetAccount) { if (!confirm("초기 비밀번호로 재설정하고 모든 로그인 세션을 종료할까요?")) return; try { await api(`/api/accounts/${resetAccount.dataset.resetAccount}/reset-password`, { method: "POST" }); await loadAccounts(); notice("초기 비밀번호로 재설정했습니다."); } catch (e) { notice(e.message); } return; }
   const toggleAccount = event.target.closest("[data-toggle-account]"); if (toggleAccount) { const account = state.accounts.find((item) => item.id === toggleAccount.dataset.toggleAccount); if (!account || !confirm(account.isActive ? "비활성화하면 모든 로그인 세션이 종료됩니다." : "계정을 다시 활성화할까요?")) return; try { await api(`/api/accounts/${account.id}/status`, { method: "POST", body: JSON.stringify({ isActive: !account.isActive }) }); await loadAccounts(); notice(account.isActive ? "계정을 비활성화했습니다." : "계정을 활성화했습니다."); } catch (e) { notice(e.message); } return; }
   const remove = event.target.closest("[data-remove-member]"); if (remove && state.activeTeam) { try { await api(`/api/teams/${state.activeTeam.id}/members/${remove.dataset.removeMember}`, { method: "DELETE" }); await loadData(); await openTeam(state.activeTeam.id); notice("조원 편성을 해제했습니다."); } catch (e) { notice(e.message); } return; }
